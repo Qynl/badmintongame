@@ -1,8 +1,9 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { DoubleSide, Group, Shape, ShapeGeometry } from 'three';
+import { useGameStore } from '../../state/gameStore';
 import type { GameEngine } from '../GameEngine';
-export function ShuttleModel() {
+export function ShuttleModel({ readable = false }: { readable?: boolean }) {
   const feather = useMemo(() => {
     const shape = new Shape(); shape.moveTo(0, 0); shape.quadraticCurveTo(-0.009, 0.036, -0.0085, 0.059); shape.quadraticCurveTo(0, 0.071, 0.0085, 0.059); shape.quadraticCurveTo(0.009, 0.037, 0, 0);
     return new ShapeGeometry(shape, 6);
@@ -13,7 +14,7 @@ export function ShuttleModel() {
     <mesh position={[0, 0.011, 0]}><cylinderGeometry args={[0.014, 0.013, 0.006, 16]}/><meshStandardMaterial color="#385c47" roughness={0.85}/></mesh>
     {Array.from({ length: 16 }, (_, i) => <group key={i} rotation={[0, i * Math.PI / 8, 0]} position={[0, 0.012, 0]}>
       <group position={[0, 0, 0.01]} rotation={[0.31, 0, 0]}>
-        <mesh geometry={feather}><meshStandardMaterial color={i % 3 === 0 ? '#e5e4d7' : '#fcfaec'} roughness={0.85} side={DoubleSide}/></mesh>
+        <mesh geometry={feather}><meshStandardMaterial color={i % 3 === 0 ? '#e5e4d7' : '#fcfaec'} roughness={0.85} emissive="#dce7d1" emissiveIntensity={readable ? 0.14 : 0} side={DoubleSide}/></mesh>
         <mesh position={[0, 0.03, 0.0004]}><cylinderGeometry args={[0.0004, 0.0008, 0.06, 4]}/><meshStandardMaterial color="#cfcbb4" roughness={1}/></mesh>
       </group>
     </group>)}
@@ -21,7 +22,8 @@ export function ShuttleModel() {
   </group>;
 }
 export function Shuttlecock({ engine }: { engine: GameEngine }) {
+  const assisted = useGameStore((s) => s.settings.controls === 'assisted');
   const group = useRef<Group>(null), feathers = useRef<Group>(null);
-  useFrame(() => { if (!group.current) return; group.current.visible = engine.shuttle.visible; group.current.position.copy(engine.shuttle.position); group.current.quaternion.copy(engine.shuttle.orientation); if (feathers.current) feathers.current.rotation.y = engine.shuttle.spin; });
-  return <group ref={group}><group ref={feathers}><ShuttleModel/></group></group>;
+  useFrame(({ camera }) => { if (!group.current) return; group.current.visible = engine.shuttle.visible; group.current.position.copy(engine.shuttle.position); const distance = camera.position.distanceTo(engine.shuttle.position); group.current.scale.setScalar(assisted ? Math.min(2.6, 1.45 + distance * 0.075) : 1); group.current.quaternion.copy(engine.shuttle.orientation); if (feathers.current) feathers.current.rotation.y = engine.shuttle.spin; });
+  return <group ref={group}><group ref={feathers}><ShuttleModel readable={assisted}/></group></group>;
 }

@@ -52,3 +52,20 @@ test('V2 training exposes target progress and a real string-bed display', async 
   await expect(page.getByText('ON TARGET', { exact: true })).toBeVisible();
   await expect(page.getByText('BEST STREAK', { exact: true })).toBeVisible();
 });
+test('Assisted is the default and a held mouse button actually returns a shuttle', async ({ page }) => {
+  test.setTimeout(180000);
+  await page.setViewportSize({ width: 960, height: 640 });
+  await page.getByRole('button', { name: /Free practice/ }).click();
+  await page.getByRole('button', { name: 'Find your rhythm', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Assisted RECOMMENDED/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Step onto the court', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => Boolean(document.pointerLockElement)), { timeout: 30000 }).toBe(true);
+  await page.mouse.down();
+  const contacts = page.locator('.metric-row').filter({ hasText: 'Racket contacts' }).locator('strong');
+  await expect(contacts).not.toHaveText('0', { timeout: 90000 });
+  await page.mouse.up();
+  await page.evaluate(() => document.exitPointerLock());
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: /Simulation Exact string-bed/ }).click();
+  await expect(page.getByRole('button', { name: /Simulation Exact string-bed/ })).toHaveAttribute('aria-pressed', 'true');
+});

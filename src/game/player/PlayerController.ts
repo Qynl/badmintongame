@@ -10,7 +10,7 @@ export class PlayerController {
   private wish = new Vector3();
   private euler = new Euler(0, 0, 0, 'YXZ');
   step(dt: number, input: InputManager, settings: Settings, mouseX: number, mouseY: number): { landed: boolean; hardTurn: boolean } {
-    const lookScale = input.swinging ? 0.16 : 1;
+    const lookScale = input.swinging ? settings.controls === 'assisted' ? 0.5 : 0.16 : 1;
     this.yaw -= mouseX * 0.0018 * settings.sensitivity * lookScale;
     this.pitch = MathUtils.clamp(this.pitch - mouseY * 0.0018 * settings.sensitivity * lookScale, -1.25, 1.25);
     const x = Number(input.keys.has('KeyD')) - Number(input.keys.has('KeyA'));

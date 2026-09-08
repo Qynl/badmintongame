@@ -1,6 +1,20 @@
-# Feather V2
+# Feather 2.1 — Rally update
 
 A playable first-person badminton prototype for desktop browsers. Built with React 19, Vite, TypeScript, Three.js, React Three Fiber, drei, and Zustand. The menu is a live view of the same court used in gameplay—not a background image.
+
+## 2.1: easier to hit, easier to read
+
+**Start with Assisted + Casual. Click when the shuttle gets close, or hold click for extra timing help. No mouse flick is needed to return it.**
+
+- Assisted is the new default, including for saved preferences that predate the control selector. Existing audio/graphics/difficulty preferences are retained.
+- A click is buffered for 0.8 seconds; holding click keeps the racket ready for each incoming shuttle. Guided reach moves the visible racket, with a 30 cm swept contact tolerance inside a bounded 2.05 m horizontal reach. It cannot hit across the court, behind the player, or without swing input.
+- Neutral clicks produce net-safe rally returns. Mouse flicks change aim, depth and loft. The helper acts at contact, never by steering the shuttle in flight. This is intentionally assistance, **not** the strict physical contact model.
+- One click (or E) handles an assisted serve. Strict manual serving remains in Simulation mode.
+- Casual/Club assisted rallies target a descending, reachable contact point instead of a deep floor point that can fly over the player's head. Expert retains its tactical targeting.
+- The shuttle is visually enlarged in Assisted mode, with optional tracking, offscreen arrows, in-reach prompts, short match trails and contact confirmation. Physics dimensions are unchanged.
+- Fixed capture-induced camera jumps, preserved very quick clicks between physics ticks, and stopped dropping legitimate high-speed mouse input after capture settles.
+- Removed the arbitrary 18-second rally cutoff. Longest-rally statistics update while the rally is live.
+- Launch buttons remain visible in the setup dialog; the canvas no longer causes horizontal overflow while resizing.
 
 ## V2 improvements
 
@@ -20,34 +34,35 @@ npm install
 npm run dev       # 0.0.0.0:5173; supports the Arena preview host
 npm run build     # type-check + production bundle
 npm run preview
-npm test          # 43 simulation/rules/integration tests
+npm test          # 61 simulation/input/rules/integration tests
 ```
 
 Desktop keyboard, mouse, WebGL 2 and hardware acceleration are required for gameplay. The menus adapt to small screens; touch gameplay is not implemented. Fonts and procedural assets are bundled locally. There are no asset CDN, backend, account, or API-key requirements.
 
 ## Controls
 
-| Input | Action |
-|---|---|
-| WASD | Athletic movement with acceleration, braking and reduced backward speed |
-| Shift + movement | Sprint / extend into a lunge |
-| Space | Jump; air control is reduced |
-| Mouse | Look |
-| Hold left mouse + mouse movement | Guide the racket; up raises it, down lowers it, lateral movement reaches sideways |
-| Release left mouse | Recover the arm and wrist |
-| E | Release your serve; restart the feed in practice/training |
-| Escape | Pause and release the cursor |
+| Input | Assisted (default) | Simulation (opt-in) |
+|---|---|---|
+| WASD | Move into position | Same |
+| Shift + movement | Sprint / reach | Same |
+| Space | Jump | Same |
+| Mouse | Look and aim | Look |
+| Left click | Start a buffered swing | Hold and move the mouse to move the racket |
+| Hold left mouse | Keep ready for forgiving contact timing | Manual wrist and swing movement |
+| Mouse flick while swinging | Up: deeper; gentle down: shorter; fast down at high contact: attack; sideways: placement | Actual racket movement determines the shot |
+| E | Serve / restart a practice feed | Release a serve / restart a practice feed |
+| Escape | Pause and release the cursor | Same |
 
-**Start in free practice.** The shuttle is small because the court and equipment use real-world scale. Read its flight, move your feet, then hold click and trace a short swing. Swinging reduces camera sensitivity so your wrist can move without losing sight of the shuttle. Contact uses the actual racket reach: there is no magnet, auto-hit, or shot button.
+**Assisted mode:** try Free practice + Casual and hold click for your first few returns. Move for shots outside your reach. The green cue marks a reachable shuttle; a plain click makes a useful return. You can disable the screen cues separately in Settings. Friendly rallies are deliberately forgiving; select Expert when you want tactical placement.
 
-For a serve, the racket starts in a low, inverted underhand grip and the view is aimed at the diagonal service box. Press E, then make a brisk upward mouse motion while holding left click. Contact must stay below 1.15 m. Adjust sensitivity in Settings if the swing envelope feels too large or small.
+**Simulation mode:** the exact string bed must meet the shuttle. Hold click and trace the stroke with the mouse. There is no guided reach or trajectory correction. Serving uses the low underhand grip: press E, then swing upward through the released shuttle below 1.15 m. This is substantially harder and is no longer the default.
 
 ## Modes
 
 - **Match:** singles against a predictive opponent; three difficulties; rally scoring to 21, win by two, cap at 30, best of three; diagonal service, automatic opponent service, double-contact/net/out faults, changing ends, and match results.
 - **Free practice:** unscored AI rallies with automatic feeds. Toggle the shuttle trail, landing prediction and live contact metrics.
 - **Shot training:** select clear, drop, smash or net shot. Repeated feeds and starting positions are tuned to the selected shot. Each drill highlights its own landing zone. The HUD separately tracks matched shot classifications, completed attempts, successful shot-plus-target landings, accuracy and streaks. A matching classification alone does **not** count as a successful drill. Press E to start a fresh feed without recording a failed attempt.
-- **Settings:** performance/balanced/ultra rendering, volume, sensitivity, head motion and practice aids. Preferences persist locally.
+- **Settings:** Assisted/Simulation controls, optional readability cues, performance/balanced/ultra rendering, volume, sensitivity, head motion and practice aids. Preferences persist locally.
 
 ## Architecture
 
@@ -60,7 +75,7 @@ src/
   game/
     GameEngine.ts   Fixed-step orchestration; no React physics state
     rendering/      Scene, reusable racket, practice visualizations
-    player/         Bounded acceleration, head model, procedural arm & wrist
+    player/         Bounded acceleration, strict racket model, guided swings, arm & wrist
     input/          Keyboard/mouse capture, focus and cleanup
     shuttle/        Specialized flight integrator and feather/cork model
     physics/        Quadratic aerodynamics, swept string-bed/net collision
@@ -76,7 +91,9 @@ src/
 
 The custom physics solution runs at **120 Hz** with bounded frame catch-up. A feather shuttle uses gravity plus velocity-dependent quadratic drag (terminal falling speed approximately 6.7 m/s). Drag is integrated with a stable exact decay term. Feather orientation relaxes towards the relative airflow direction and includes spin. This is an engineering approximation, not CFD or a calibrated commercial shuttle model.
 
-Racket translation, wrist orientation and angular velocity come from mouse input and the player transform. Collision checks sweep the shuttle relative to the elliptical string bed between substeps. Restitution, local contact-point velocity, face angle, tangential movement and distance from the sweet spot determine the outgoing velocity. Contact coordinates are resolved using both previous and current racket orientations and exposed on the practice string-bed display. Grip changes blend gradually after service instead of generating an instantaneous flip impulse. Release recovery uses a critically damped follow-through. A classifier labels the resulting shot **after** contact. Early/late are heuristic incidence classifications, not measured against a canned timing window. The racket and hand share a transform; forearms connect the wrist to a procedural elbow/shoulder chain.
+**In Simulation mode**, racket translation, wrist orientation and angular velocity come from mouse input and the player transform. Collision checks sweep the shuttle relative to the elliptical string bed between substeps. Restitution, local contact-point velocity, face angle, tangential movement and distance from the sweet spot determine the outgoing velocity. Contact coordinates are resolved using both previous and current racket orientations and exposed on the practice string-bed display. Grip changes blend gradually after service instead of generating an instantaneous flip impulse. Release recovery uses a critically damped follow-through. A classifier labels the resulting shot **after** contact. Early/late are heuristic incidence classifications, not measured against a canned timing window. The racket and hand share a transform; forearms connect the wrist to a procedural elbow/shoulder chain.
+
+Assisted contact lives separately in `GuidedSwing.ts`: input buffering, bounded reach, visible racket tracking, swept contact tolerance and a net-safe launch solver. Assisted quality/impact-map values describe the guided contact offset, not an exact calibrated string-bed strike. Shot labels are still classified from the resulting velocity. Both modes use the same shuttle aerodynamics, court rules, scoring and AI.
 
 The opponent predicts a descending intercept with the same aerodynamic model, moves with bounded response, judges likely out shots with difficulty-dependent uncertainty, chooses targets based on player position, and solves a drag-compensated launch. Return planning increases loft when a proposed trajectory would hit the net; execution error is applied afterward, and the shuttle is never steered in flight. Difficulty changes reaction, pace, error and miss probability. AI hits currently use a reachable contact volume with procedural racket alignment, rather than the player's full swept collision model.
 
@@ -94,7 +111,9 @@ High-frequency simulation stays in mutable engine objects and R3F frame callback
 
 ## Tests
 
-`npm test` runs 43 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
+`npm test` runs 61 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
+
+The 2.1 regression suite additionally verifies no-motion single-click serves and returns with 0–200 ms reaction delays, at least 8 successful connections in 10 repeated feeds, a deterministic 40-second rally without precision aiming, mouse-intent shot variety, no-input/behind-player/out-of-reach rejection, strict-mode preservation, input buffering and capture-warp filtering.
 
 Browser smoke tests:
 
@@ -103,7 +122,7 @@ npx playwright install --with-deps chromium
 npm run test:browser
 ```
 
-Five passing browser smoke tests check mode/difficulty selection, mouse capture, pause/return, settings persistence, small-screen overflow, and V2 training progress and string-bed feedback. Software-rendered Chromium may require longer timeouts than a hardware-accelerated desktop browser.
+Six browser smoke tests check mode/difficulty selection, mouse capture, pause/return, settings persistence, small-screen overflow, V2 training progress and string-bed feedback, plus an actual Assisted shuttle return using browser mouse input. Software-rendered Chromium may require longer timeouts than a hardware-accelerated desktop browser.
 
 ## Scope and next steps
 

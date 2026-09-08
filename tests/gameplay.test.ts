@@ -2,7 +2,8 @@ import { it, expect } from 'vitest';
 import { GameEngine } from '../src/game/GameEngine';
 import { useGameStore } from '../src/state/gameStore';
 import type { InputManager } from '../src/game/input/InputManager';
-it('finds a playable motion-driven legal serve', () => {
+it('finds a playable motion-driven legal serve in Simulation mode', () => {
+  useGameStore.getState().setSettings({ controls: 'simulation' });
   const results: unknown[] = [];
   for (const delay of [0, 4, 8, 12, 16]) for (const dy of [-50, -30, -15, 15, 30, 50]) {
     useGameStore.getState().start('match'); const e = new GameEngine();

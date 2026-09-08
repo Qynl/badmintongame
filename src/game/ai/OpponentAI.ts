@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import type { ShuttlecockPhysics } from '../shuttle/ShuttlecockPhysics';
-import { predictFlight, planReturn } from './Prediction';
+import { predictFlight, planReturn, planIntercept } from './Prediction';
 import { chooseShot, levels } from './DecisionMaking';
 import type { Difficulty } from '../../state/gameStore';
 export class OpponentAI {
@@ -9,7 +9,7 @@ export class OpponentAI {
   racketTarget = new Vector3(); contactPoint = new Vector3(); leavingOut = false;
   private predictionTimer = 0; private error = new Vector3(); private direction = new Vector3();
   reset() { this.target.copy(this.position); this.velocity.set(0, 0, 0); this.reaction = 0; this.lastFlight = -1; this.mayHit = true; this.leavingOut = false; this.predictionTimer = 0; }
-  step(dt: number, shuttle: ShuttlecockPhysics, player: Vector3, difficulty: Difficulty, hits: number): boolean {
+  step(dt: number, shuttle: ShuttlecockPhysics, player: Vector3, difficulty: Difficulty, hits: number, friendly = false): boolean {
     const level = levels[difficulty];
     this.swing = Math.max(0, this.swing - dt * 2.7);
     const incoming = shuttle.active && shuttle.lastHit === 0 && shuttle.served;
@@ -38,8 +38,8 @@ export class OpponentAI {
     this.stride += this.velocity.length() * dt * 3.3; this.racketTarget.copy(shuttle.position);
     const reach = Math.hypot(shuttle.position.x - this.position.x, shuttle.position.z - this.position.z);
     if (incoming && this.mayHit && !this.leavingOut && this.reaction === 0 && shuttle.hitCooldown === 0 && shuttle.position.z < -0.45 && shuttle.position.y > 0.65 && shuttle.position.y < 2.55 && reach < 0.95 && shuttle.velocity.y < 2) {
-      const decision = chooseShot(shuttle.position, player, difficulty);
-      const plan = planReturn(shuttle.position, decision.target, decision.loft, difficulty === 'casual' ? 0.35 : 0.12);
+      const decision = chooseShot(shuttle.position, player, difficulty, friendly);
+      const plan = decision.target.y > 0 ? planIntercept(shuttle.position, decision.target, decision.loft) : planReturn(shuttle.position, decision.target, decision.loft, difficulty === 'casual' ? 0.35 : 0.12);
       shuttle.velocity.copy(plan.velocity);
       // Apply execution error *after* planning, so even Expert can miss its target or clip the net.
       shuttle.velocity.x += (Math.random() - 0.5) * level.error;

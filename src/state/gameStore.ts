@@ -2,12 +2,13 @@ import { create } from 'zustand';
 
 export type Mode = 'match' | 'practice' | 'training';
 export type Difficulty = 'casual' | 'club' | 'expert';
+export type ControlMode = 'assisted' | 'simulation';
 export type Quality = 'performance' | 'balanced' | 'ultra';
 export type ContactQuality = 'Perfect' | 'Good' | 'Late' | 'Early' | 'Off-center' | 'Miss';
 export type ShotType = 'Serve' | 'Clear' | 'Drop' | 'Smash' | 'Drive' | 'Lift' | 'Net shot' | 'Push';
 export type TrainingShot = 'Clear' | 'Drop' | 'Smash' | 'Net shot';
-export interface Settings { volume: number; sensitivity: number; quality: Quality; difficulty: Difficulty; trajectory: boolean; impact: boolean; landing: boolean; headMotion: boolean }
-export const defaultSettings: Settings = { volume: 0.55, sensitivity: 1, quality: 'balanced', difficulty: 'club', trajectory: true, impact: true, landing: true, headMotion: true };
+export interface Settings { volume: number; sensitivity: number; quality: Quality; difficulty: Difficulty; trajectory: boolean; impact: boolean; landing: boolean; headMotion: boolean; controls: ControlMode; guides: boolean }
+export const defaultSettings: Settings = { volume: 0.55, sensitivity: 1, quality: 'balanced', difficulty: 'casual', controls: 'assisted', guides: true, trajectory: true, impact: true, landing: true, headMotion: true };
 export function validateSettings(saved: unknown): Settings {
   const result = { ...defaultSettings };
   if (!saved || typeof saved !== 'object') return result;
@@ -16,7 +17,8 @@ export function validateSettings(saved: unknown): Settings {
   if (typeof s.sensitivity === 'number' && Number.isFinite(s.sensitivity)) result.sensitivity = Math.max(0.3, Math.min(2, s.sensitivity));
   if (['performance', 'balanced', 'ultra'].includes(s.quality as string)) result.quality = s.quality as Quality;
   if (['casual', 'club', 'expert'].includes(s.difficulty as string)) result.difficulty = s.difficulty as Difficulty;
-  for (const key of ['trajectory', 'impact', 'landing', 'headMotion'] as const) if (typeof s[key] === 'boolean') result[key] = s[key];
+  if (['assisted', 'simulation'].includes(s.controls as string)) result.controls = s.controls as ControlMode;
+  for (const key of ['guides', 'trajectory', 'impact', 'landing', 'headMotion'] as const) if (typeof s[key] === 'boolean') result[key] = s[key];
   return result;
 }
 function savedSettings(): Settings {
@@ -28,7 +30,7 @@ const freshSession = () => ({
   contact: null as ContactQuality | null, shot: null as ShotType | null, speed: 0, racketSpeed: 0, contacts: 0,
   trainingHits: 0, trainingAttempts: 0, trainingSuccess: 0, trainingStreak: 0, trainingBestStreak: 0,
   winner: null as 0 | 1 | null, impactPoint: null as [number, number] | null,
-  feedback: '', lastLanding: null as 'Target' | 'In' | 'Out' | null, nextFeed: 0, courtFade: 0, rallies: 0, bestRally: 0,
+  feedback: '', lastLanding: null as 'Target' | 'In' | 'Out' | null, nextFeed: 0, courtFade: 0, rallies: 0, bestRally: 0, swingReady: false, reachReady: false, contactPulse: 0,
 });
 type SessionState = ReturnType<typeof freshSession>;
 interface GameStore extends SessionState {

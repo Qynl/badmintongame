@@ -1,17 +1,19 @@
 import { ArrowUpRight, Check, Clock3, Headphones, Trophy, Target, Infinity as InfinityIcon } from 'lucide-react';
+import { ControlChoice } from '../UI/ControlChoice';
 import { Modal } from '../UI/Modal';
 import type { Mode, TrainingShot } from '../../state/gameStore';
 import { useGameStore } from '../../state/gameStore';
 import { startGame } from '../UI/gameActions';
-const levels = [ { id: 'casual', name: 'Casual', description: 'A little more time. A little more room.', bars: 1 }, { id: 'club', name: 'Club player', description: 'Smart placement. A proper challenge.', bars: 2 }, { id: 'expert', name: 'Expert', description: 'Faster feet. Fewer second chances.', bars: 3 } ] as const;
+const levels = [ { id: 'casual', name: 'Casual', description: 'Friendly returns. Longer rallies. Start here.', bars: 1 }, { id: 'club', name: 'Club player', description: 'Smart placement. A proper challenge.', bars: 2 }, { id: 'expert', name: 'Expert', description: 'Faster feet. Fewer second chances.', bars: 3 } ] as const;
 export function Setup({ mode, onClose }: { mode: Mode; onClose: () => void }) {
   const difficulty = useGameStore((s) => s.settings.difficulty), set = useGameStore((s) => s.setSettings), shot = useGameStore((s) => s.trainingShot), setShot = useGameStore((s) => s.setTrainingShot);
   return <Modal title={mode === 'match' ? 'Meet you at the net.' : mode === 'practice' ? 'Make yourself at home.' : 'One shot. A little better.'} eyebrow={mode === 'match' ? 'SINGLES / QUICK MATCH' : mode === 'practice' ? 'FREE PRACTICE' : 'SHOT TRAINING'} onClose={onClose}>
     <div className="setup-summary">{mode === 'match' ? <Trophy size={21}/> : mode === 'practice' ? <InfinityIcon size={23}/> : <Target size={22}/>}<div><strong>{mode === 'match' ? 'The classic. Just you and the game.' : mode === 'practice' ? 'No scoreboard. No pressure.' : 'Read the feed. Refine your contact.'}</strong><p>{mode === 'match' ? '21 points · Best of 3 games · Rally scoring' : mode === 'practice' ? 'AI rallies · Automatic feeds · Live physics tools' : 'Target zones · Landing feedback · Accuracy & streaks'}</p></div></div>
+    <ControlChoice compact/>
     {mode !== 'training' ? <><div className="section-label">YOUR OPPONENT</div><div className="difficulty-options">{levels.map((level) => <button key={level.id} className={`difficulty-option ${difficulty === level.id ? 'selected' : ''}`} onClick={() => set({ difficulty: level.id })}><span className="level-bars">{[1, 2, 3].map((bar) => <i key={bar} className={bar <= level.bars ? 'lit' : ''}/>)}</span><span><strong>{level.name}</strong><small>{level.description}</small></span><span className="radio">{difficulty === level.id && <Check size={12}/>}</span></button>)}</div></> : <><div className="section-label">FOCUS ON A SHOT</div><div className="shot-options">{(['Clear', 'Drop', 'Smash', 'Net shot'] as TrainingShot[]).map((item) => <button className={shot === item ? 'selected' : ''} key={item} onClick={() => setShot(item)}>{item}{shot === item && <Check size={14}/>}</button>)}</div><p className="field-note">Match the shot and land inside the highlighted zone to score a success. {shot === 'Smash' ? 'High feeds. Reach up, then accelerate down through the shuttle.' : shot === 'Clear' ? 'Lift the face and follow through upward. Aim deep into the back court.' : shot === 'Drop' ? 'Meet the shuttle high with a soft, controlled contact.' : 'Move close to the service line. Keep your touch light and your face open.'}</p></>}
     <div className="setup-venue"><div className="venue-mini"><span>01</span><i/></div><div><span>THE FEATHER CLUB</span><strong>Indoor court 01</strong><small>Regulation singles · Feather shuttle</small></div><span className="live-dot"/></div>
-    <button className="primary-button full-width" onClick={() => startGame(mode)}>Step onto the court <ArrowUpRight size={22}/></button>
+    <footer className="setup-launch"><button className="primary-button full-width" onClick={() => startGame(mode)}>Step onto the court <ArrowUpRight size={22}/></button>
     <div className="setup-footnote"><Headphones size={13}/> Headphones on. World off. <Clock3 size={13}/><span>{mode === 'match' ? 'Play at your pace' : 'Stay as long as you like'}</span></div>
-    <p className="desktop-note">Keyboard and mouse required. Your cursor will lock to the court; press Esc to release it.</p>
+    <p className="desktop-note">Keyboard and mouse required. Your cursor will lock to the court; press Esc to release it.</p></footer>
   </Modal>;
 }

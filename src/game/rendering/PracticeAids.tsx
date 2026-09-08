@@ -11,11 +11,14 @@ export function PracticeAids({ engine }: { engine: GameEngine }) {
   const geometry = useMemo(() => { const g = new BufferGeometry(); g.setAttribute('position', new Float32BufferAttribute(new Float32Array(140 * 3), 3)); return g; }, []);
   const line = useMemo(() => new ThreeLine(geometry, new LineBasicMaterial({ color: '#e8bb7f', transparent: true, opacity: 0.5 })), [geometry]);
   useFrame(() => {
-    line.visible = mode !== 'match' && settings.trajectory && engine.shuttle.active;
+    const shortTrail = mode === 'match' && settings.controls === 'assisted' && settings.guides;
+    line.visible = ((mode !== 'match' && settings.trajectory) || shortTrail) && engine.shuttle.active;
+    line.material.opacity = shortTrail ? 0.26 : 0.5;
     const path = engine.shuttle.path;
     if (line.visible && (path.length !== lastPointCount.current || path.length === 140)) {
-      const attr = geometry.getAttribute('position'); path.forEach((p, i) => attr.setXYZ(i, p.x, p.y, p.z));
-      attr.needsUpdate = true; geometry.setDrawRange(0, path.length); geometry.computeBoundingSphere(); lastPointCount.current = path.length;
+      const attr = geometry.getAttribute('position'), start = shortTrail ? Math.max(0, path.length - 10) : 0;
+      for (let i = start; i < path.length; i++) attr.setXYZ(i - start, path[i].x, path[i].y, path[i].z);
+      attr.needsUpdate = true; geometry.setDrawRange(0, path.length - start); geometry.computeBoundingSphere(); lastPointCount.current = path.length;
     }
     if (marker.current) {
       marker.current.visible = mode !== 'match' && settings.landing && engine.showLanding && engine.shuttle.active;

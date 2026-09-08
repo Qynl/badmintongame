@@ -51,3 +51,12 @@ export function planReturn(from: Vector3, target: Vector3, preferredLoft: number
   }
   return { velocity, ...sample };
 }
+
+/** Aim at a reachable descending contact point, not a floor point that can sail over the receiver. */
+export function planIntercept(from: Vector3, contact: Vector3, loft: number) {
+  let velocity = solveLaunch(from, contact, loft), sample = sampleFlight(from, velocity);
+  for (let attempt = 1; attempt <= 8 && (sample.netY === null || sample.netY < 1.72); attempt++) {
+    velocity = solveLaunch(from, contact, loft + attempt * 1.5); sample = sampleFlight(from, velocity);
+  }
+  return { velocity, ...sample };
+}

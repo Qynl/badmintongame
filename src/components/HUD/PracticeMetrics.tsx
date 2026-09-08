@@ -20,12 +20,13 @@ export function NextFeed() {
   return <span className="next-feed"><Timer size={12}/> NEXT FEED {next > 0 ? `${next.toFixed(1)}s` : 'READY'}<span>·</span><kbd>E</kbd> FEED NOW</span>;
 }
 export function PracticeMetrics() {
+  const assisted = useGameStore((s) => s.settings.controls === 'assisted');
   const contact = useGameStore((s) => s.contact), shot = useGameStore((s) => s.shot), speed = useGameStore((s) => s.speed);
   const racketSpeed = useGameStore((s) => s.racketSpeed), impact = useGameStore((s) => s.settings.impact);
   const contacts = useGameStore((s) => s.contacts), mode = useGameStore((s) => s.mode);
   const feedback = useGameStore((s) => s.feedback), landing = useGameStore((s) => s.lastLanding);
   return <>{impact && <aside className="practice-metrics" aria-label="Contact lab">
-    <div className="metrics-heading"><SlidersHorizontal size={13}/> CONTACT LAB <span>V2</span></div>
+    <div className="metrics-heading"><SlidersHorizontal size={13}/> CONTACT LAB <span>{assisted ? 'ASSISTED' : 'EXACT'}</span></div>
     <div className="impact-summary"><div className={`contact-result ${contact === 'Perfect' ? 'perfect' : ''}`}>{contact || 'Find the feel.'}<small>{shot || 'Make your first connection'}</small>{landing && <span className={`landing-chip ${landing === 'Target' ? 'on-target' : ''}`}>{landing === 'Target' ? <Target size={10}/> : <Crosshair size={10}/>} {landing === 'Target' ? 'ON TARGET' : landing === 'In' ? 'LANDED IN' : 'OUT / FAULT'}</span>}</div><StringBedImpact/></div>
     <div className="metric-row"><span>Racket speed</span><strong>{racketSpeed.toFixed(1)} <small>KM/H</small></strong></div>
     <div className="metric-row"><span>Shuttle off strings</span><strong>{speed.toFixed(0)} <small>KM/H</small></strong></div>

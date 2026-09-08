@@ -40,8 +40,8 @@ export function racketContact(shuttle: ShuttlecockPhysics, racket: RacketControl
 export function classifyShot(velocity: Vector3, position: Vector3): ShotType {
   const speed = velocity.length(), slope = velocity.y / Math.max(0.1, Math.hypot(velocity.x, velocity.z));
   if (position.y > 2.0 && slope < -0.2 && speed > 16) return 'Smash';
+  if (Math.abs(position.z) < 2.2 && speed < 8) return 'Net shot';
   if (slope > 0.48) return position.y < 1.5 ? 'Lift' : 'Clear';
-  if (Math.abs(position.z) < 2 && speed < 8) return 'Net shot';
   if (speed < 11 && position.y > 1.6) return 'Drop';
   if (speed < 13) return 'Push';
   return 'Drive';
