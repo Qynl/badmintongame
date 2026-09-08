@@ -3,7 +3,8 @@ import type { PlayerController } from './PlayerController';
 import type { RacketController } from './RacketController';
 import type { ShuttlecockPhysics } from '../shuttle/ShuttlecockPhysics';
 import type { Contact } from '../physics/CollisionSystem';
-import { classifyShot } from '../physics/CollisionSystem';
+import { planAssistedShot } from './ShotPlanner';
+import type { AssistedShot } from './ShotPlanner';
 import { planReturn } from '../ai/Prediction';
 
 /** Accessible controls, deliberately separate from the strict string-bed simulation. */
@@ -14,7 +15,8 @@ export class GuidedSwing {
   armed = false;
   connected = false;
   motion = new Vector2();
-  animation = 0;
+  animation = 0; intent: AssistedShot = 'rally'; smashReady = false;
+  private requestAge = Infinity; private followRotation = new Quaternion();
   private afterHit = 0;
   private held = false;
   private forward = new Vector3();
@@ -24,12 +26,14 @@ export class GuidedSwing {
   private targetRotation = new Quaternion();
   private strokeCenter = new Vector3();
 
-  input(dt: number, pressed: boolean, held: boolean, dx: number, dy: number) {
+  input(dt: number, pressed: boolean, held: boolean, dx: number, dy: number, requested?: AssistedShot) {
+    this.requestAge += dt;
     this.buffered = Math.max(0, this.buffered - dt); this.cooldown = Math.max(0, this.cooldown - dt);
     this.afterHit = Math.max(0, this.afterHit - dt); this.held = held;
     this.motion.multiplyScalar(Math.exp(-5 * dt));
-    if (pressed && this.cooldown === 0) { this.buffered = 0.8; this.animation = 1; this.connected = false; }
+    if (pressed) { this.buffered = 0.8; this.animation = 1; this.connected = false; this.intent = requested ?? 'rally'; this.requestAge = 0; }
     if (held || this.buffered > 0) { this.motion.x += dx; this.motion.y += dy; }
+    if (held && this.buffered === 0 && this.cooldown === 0) this.intent = requested ?? 'rally';
     this.motion.clampLength(0, 140);
     this.armed = (held || this.buffered > 0) && this.cooldown === 0;
     this.animation = Math.max(0, this.animation - dt * 3.2);
@@ -49,10 +53,15 @@ export class GuidedSwing {
   /** Move the visible hand/racket into the stroke; then check their actual swept proximity. */
   track(dt: number, racket: RacketController, player: PlayerController, shuttle: ShuttlecockPhysics) {
     this.reachable = this.canReach(player, shuttle);
+    const opportunity = shuttle.position.clone().sub(player.position);
+    const ahead = opportunity.x * -Math.sin(player.yaw) + opportunity.z * -Math.cos(player.yaw);
+    this.smashReady = shuttle.active && shuttle.lastHit === 1 && shuttle.served &&
+      Math.hypot(opportunity.x, opportunity.z) < 2.8 && ahead > -0.18 && opportunity.y >= 2.05 && opportunity.y <= 4.2;
     if (this.afterHit > 0) {
       const recovery = 1 - Math.exp(-9 * dt);
       racket.center.lerpVectors(this.strokeCenter, racket.center, recovery);
       this.strokeCenter.copy(racket.center);
+      racket.rotation.slerp(this.followRotation, this.afterHit / 0.32);
       this.finishPose(dt, racket);
       return;
     }
@@ -70,9 +79,9 @@ export class GuidedSwing {
     this.desired.copy(shuttle.position).addScaledVector(shuttle.velocity, 0.035);
     this.desired.addScaledVector(this.forward, 0.055);
     // Reach takes time, rather than teleporting a racket onto an incoming shuttle.
-    this.relative.subVectors(this.desired, racket.previous).clampLength(0, 10 * dt);
+    this.relative.subVectors(this.desired, racket.previous).clampLength(0, (this.intent === 'smash' ? 16 : 10) * dt);
     racket.center.copy(racket.previous).add(this.relative);
-    this.face.copy(this.forward); this.face.y = 0.5 - this.motion.y * 0.006; this.face.normalize();
+    this.face.copy(this.forward); this.face.y = this.intent === 'smash' ? -0.38 : this.intent === 'drop' ? 0.24 : 0.5 - this.motion.y * 0.006; this.face.normalize();
     this.targetRotation.setFromUnitVectors(new Vector3(0, 0, -1), this.face);
     racket.rotation.copy(racket.previousRotation).slerp(this.targetRotation, 1 - Math.exp(-22 * dt));
     racket.normal.set(0, 0, -1).applyQuaternion(racket.rotation);
@@ -94,25 +103,27 @@ export class GuidedSwing {
 
     const wasServe = !shuttle.served;
     const downward = this.motion.y, lateral = this.motion.x;
-    // A plain click produces a useful rally ball. A flick changes depth, loft and placement.
-    const attacking = downward > 28 && shuttle.position.y > 2.15;
-    const soft = downward > 10 && !attacking;
-    const netTouch = Math.abs(shuttle.position.z) < 2.2 && Math.abs(downward) < 18 && !wasServe;
-    const depth = wasServe ? 5.25 : netTouch ? 1.0 : soft ? 1.35 : attacking ? 4.3 : 5.1;
-    let loft = wasServe ? 10 : netTouch ? 2.2 : soft ? 2 : attacking ? -7 : 10 + Math.max(0, -downward) * 0.055;
-    loft = Math.min(16, loft);
+    // Explicit inputs take precedence; legacy flicks still work for players who prefer them.
+    const chosen = this.intent !== 'rally' ? this.intent : downward > 28 && shuttle.position.y > 2.15 ? 'smash' : downward > 10 ? 'drop' : 'rally';
+    const timed = this.requestAge < 0.30;
+    const depth = wasServe ? 5.25 : chosen === 'drop' ? 1.35 : chosen === 'smash' ? 4.4 : 5.5;
     const distanceZ = shuttle.position.z + depth;
     const aimX = shuttle.position.x - Math.tan(MathUtils.clamp(player.yaw, -0.8, 0.8)) * distanceZ + lateral * 0.012;
     const target = new Vector3(wasServe && serveTargetX !== undefined ? serveTargetX : MathUtils.clamp(aimX, -2.2, 2.2), 0, -depth);
-    const launch = planReturn(shuttle.position, target, loft, attacking || netTouch ? 0.07 : 0.22).velocity;
+    const plan = wasServe ? { velocity: planReturn(shuttle.position, target, 10, 0.22).velocity, shot: 'Serve' as const, attacking: false, feedback: 'In play. Build your opening.' }
+      : planAssistedShot(shuttle.position, aimX, chosen, timed);
+    const launch = plan.velocity;
     // Assistance is applied at contact only. The outgoing shuttle still obeys normal flight physics.
     shuttle.velocity.copy(launch); shuttle.lastHit = 0; shuttle.served = true; shuttle.crossedNet = false; shuttle.hitCooldown = 0.35;
-    this.buffered = 0; this.cooldown = 0.42; this.armed = false; this.connected = true; this.afterHit = 0.26;
-    this.strokeCenter.copy(racket.center).addScaledVector(this.forward, 0.08); racket.vibration = 0.75; this.animation = 1;
+    this.buffered = 0; this.cooldown = plan.attacking ? 0.54 : chosen === 'drop' ? 0.28 : 0.42; this.armed = false; this.connected = true; this.afterHit = plan.attacking ? 0.32 : 0.20;
+    this.strokeCenter.copy(racket.center).addScaledVector(this.forward, plan.attacking ? 0.23 : chosen === 'drop' ? 0.035 : 0.08);
+    this.strokeCenter.y -= plan.attacking ? 0.18 : 0;
+    this.followRotation.copy(racket.rotation).multiply(this.targetRotation.setFromAxisAngle(new Vector3(1, 0, 0), plan.attacking ? -0.65 : -0.08));
+    racket.vibration = plan.attacking ? 1 : chosen === 'drop' ? 0.28 : 0.65; this.animation = 1;
     const offset = distance / 0.3;
-    const quality = offset < 0.46 ? 'Perfect' : 'Good';
+    const quality = timed || offset < 0.46 ? 'Perfect' : 'Good';
     const local = nearest.applyQuaternion(racket.rotation.clone().invert());
-    return { quality, shot: wasServe ? 'Serve' : classifyShot(launch, shuttle.position), speed: launch.length(), offset,
+    return { quality, shot: plan.shot, timed: !wasServe && timed, feedback: plan.feedback, speed: launch.length(), offset,
       point: [MathUtils.clamp(local.x / 0.3, -1, 1), MathUtils.clamp(local.y / 0.3, -1, 1)], incidence: 1 };
   }
   get waitingForShuttle() { return this.held || this.buffered > 0; }

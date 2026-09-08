@@ -63,7 +63,7 @@ describe('accessible contact regressions', () => {
     } finally { random.mockRestore(); }
   });
   for (const [name, position, dy] of [
-    ['Clear', [0, 2.8, 3.5], -40], ['Drop', [0, 2.8, 3.5], 20], ['Smash', [0, 2.8, 1.4], 80], ['Net shot', [0, 1.5, 1.2], 0],
+    ['Clear', [0, 2.8, 3.5], -40], ['Drop', [0, 2.8, 3.5], 20], ['Smash', [0, 2.8, 1.4], 80], ['Net shot', [0, 1.5, 1.2], 20],
   ] as const) it(`allows a ${name} through mouse intent without a shot button`, () => {
     const player = new PlayerController(); player.position.set(0, 0, position[2] + 0.9);
     const shuttle = new ShuttlecockPhysics(); shuttle.reset(new Vector3(...position), new Vector3(0, -2, 5)); shuttle.lastHit = 1; shuttle.served = true;

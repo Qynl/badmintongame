@@ -69,3 +69,23 @@ test('Assisted is the default and a held mouse button actually returns a shuttle
   await page.getByRole('button', { name: /Simulation Exact string-bed/ }).click();
   await expect(page.getByRole('button', { name: /Simulation Exact string-bed/ })).toHaveAttribute('aria-pressed', 'true');
 });
+test('F smash and right-click drop work as separate assisted actions in the browser', async ({ page }) => {
+  test.setTimeout(240000);
+  await page.setViewportSize({ width: 960, height: 640 });
+  await page.getByRole('button', { name: /Shot training/ }).click();
+  await page.getByRole('button', { name: 'Sharpen your game', exact: true }).click();
+  await page.getByRole('button', { name: 'Smash', exact: true }).click();
+  await page.getByRole('button', { name: 'Step onto the court', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => Boolean(document.pointerLockElement)), { timeout: 30000 }).toBe(true);
+  await expect(page.getByRole('group', { name: 'Assisted shot controls' })).toBeVisible();
+  await page.keyboard.down('f');
+  await expect(page.locator('.contact-result > small')).toHaveText('Smash', { timeout: 90000 });
+  await page.keyboard.up('f');
+  await page.screenshot({ path: test.info().outputPath('shot-controls.png') });
+  await page.evaluate(() => document.exitPointerLock());
+  await page.getByRole('button', { name: /Start a fresh session/ }).click();
+  await page.mouse.down({ button: 'right' });
+  await expect(page.locator('.contact-result > small')).toHaveText('Drop', { timeout: 90000 });
+  await page.mouse.up({ button: 'right' });
+  await page.evaluate(() => document.exitPointerLock());
+});

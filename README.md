@@ -1,6 +1,17 @@
-# Feather 2.1 — Rally update
+# Feather 2.2 — Shot choice update
 
 A playable first-person badminton prototype for desktop browsers. Built with React 19, Vite, TypeScript, Three.js, React Three Fiber, drei, and Zustand. The menu is a live view of the same court used in gameplay—not a background image.
+
+## 2.2: build a point, not just a rally
+
+**Assisted: left-click rallies, right-click drops, F smashes a high ball.** Hold a control for forgiving timing, or tap close to contact for extra smash pace. Mouse-driven Simulation remains separate.
+
+- Dedicated attack and touch intents: a genuine downward smash planner, front-court drops, and delicate net shots up close. High-speed candidates are checked against the net and court before contact. Low/unviable attacks explain their defensive fallback instead of showing a fake Smash label.
+- An early high-ball cue and visible LMB / RMB / F controls make the options discoverable. Fresh strikes within 300 ms of the request get extra attacking pace; held controls still connect. Inputs during follow-through are buffered rather than discarded.
+- Casual/Club assisted matches now mix attackable lifts, short placement and open-side returns. Reaching under pressure produces a higher defensive reply. Opponents remember repeated short shots across points and recover farther forward; a new session resets that memory. Free practice retains forgiving neutral rallies.
+- Distinct smash sound, stronger racket follow-through, shot/speed feedback, smash/touch winner counts and actual winner announcements. No added aggressive camera shake.
+- Fixed the Assisted smash-training feed sailing behind the player's head. Each of the four drills now has a full-engine regression verifying contact and a successful target landing with its corresponding control.
+- These are deliberately accessible assisted controls, not physical shot buttons added to Simulation. Launch assistance happens only at contact; normal feather aerodynamics govern the outgoing flight.
 
 ## 2.1: easier to hit, easier to read
 
@@ -34,7 +45,7 @@ npm install
 npm run dev       # 0.0.0.0:5173; supports the Arena preview host
 npm run build     # type-check + production bundle
 npm run preview
-npm test          # 61 simulation/input/rules/integration tests
+npm test          # 91 simulation/input/rules/integration tests
 ```
 
 Desktop keyboard, mouse, WebGL 2 and hardware acceleration are required for gameplay. The menus adapt to small screens; touch gameplay is not implemented. Fonts and procedural assets are bundled locally. There are no asset CDN, backend, account, or API-key requirements.
@@ -47,13 +58,15 @@ Desktop keyboard, mouse, WebGL 2 and hardware acceleration are required for game
 | Shift + movement | Sprint / reach | Same |
 | Space | Jump | Same |
 | Mouse | Look and aim | Look |
-| Left click | Start a buffered swing | Hold and move the mouse to move the racket |
+| Left click | Buffered deep rally return / serve | Hold and move the mouse to move the racket |
 | Hold left mouse | Keep ready for forgiving contact timing | Manual wrist and swing movement |
+| Right mouse | Drop; net shot near the tape. Hold to stay ready. | No assisted shot |
+| F | High-contact smash. Hold to stay ready. | No assisted shot |
 | Mouse flick while swinging | Up: deeper; gentle down: shorter; fast down at high contact: attack; sideways: placement | Actual racket movement determines the shot |
 | E | Serve / restart a practice feed | Release a serve / restart a practice feed |
 | Escape | Pause and release the cursor | Same |
 
-**Assisted mode:** try Free practice + Casual and hold click for your first few returns. Move for shots outside your reach. The green cue marks a reachable shuttle; a plain click makes a useful return. You can disable the screen cues separately in Settings. Friendly rallies are deliberately forgiving; select Expert when you want tactical placement.
+**Assisted mode:** try Free practice + Casual and hold click for your first few returns. Move for shots outside your reach. The green cue marks a reachable shuttle; a plain click makes a useful return. You can disable the screen cues separately in Settings. Free-practice rallies are deliberately forgiving. In a match, clear them back, drop them forward, then attack a high reply. Match tactics vary on Casual/Club too; Expert increases the challenge.
 
 **Simulation mode:** the exact string bed must meet the shuttle. Hold click and trace the stroke with the mouse. There is no guided reach or trajectory correction. Serving uses the low underhand grip: press E, then swing upward through the released shuttle below 1.15 m. This is substantially harder and is no longer the default.
 
@@ -93,7 +106,7 @@ The custom physics solution runs at **120 Hz** with bounded frame catch-up. A fe
 
 **In Simulation mode**, racket translation, wrist orientation and angular velocity come from mouse input and the player transform. Collision checks sweep the shuttle relative to the elliptical string bed between substeps. Restitution, local contact-point velocity, face angle, tangential movement and distance from the sweet spot determine the outgoing velocity. Contact coordinates are resolved using both previous and current racket orientations and exposed on the practice string-bed display. Grip changes blend gradually after service instead of generating an instantaneous flip impulse. Release recovery uses a critically damped follow-through. A classifier labels the resulting shot **after** contact. Early/late are heuristic incidence classifications, not measured against a canned timing window. The racket and hand share a transform; forearms connect the wrist to a procedural elbow/shoulder chain.
 
-Assisted contact lives separately in `GuidedSwing.ts`: input buffering, bounded reach, visible racket tracking, swept contact tolerance and a net-safe launch solver. Assisted quality/impact-map values describe the guided contact offset, not an exact calibrated string-bed strike. Shot labels are still classified from the resulting velocity. Both modes use the same shuttle aerodynamics, court rules, scoring and AI.
+Assisted contact lives separately in `GuidedSwing.ts`: input buffering, bounded reach, visible racket tracking, swept contact tolerance and a net-safe launch solver. Assisted quality/impact-map values describe the guided contact offset, not an exact calibrated string-bed strike. Shot labels are classified from the resulting velocity and, for touch shots, predicted landing. `ShotPlanner.ts` keeps trajectory selection separate from reach and racket tracking. Both modes use the same shuttle aerodynamics, court rules, scoring and AI.
 
 The opponent predicts a descending intercept with the same aerodynamic model, moves with bounded response, judges likely out shots with difficulty-dependent uncertainty, chooses targets based on player position, and solves a drag-compensated launch. Return planning increases loft when a proposed trajectory would hit the net; execution error is applied afterward, and the shuttle is never steered in flight. Difficulty changes reaction, pace, error and miss probability. AI hits currently use a reachable contact volume with procedural racket alignment, rather than the player's full swept collision model.
 
@@ -111,9 +124,11 @@ High-frequency simulation stays in mutable engine objects and R3F frame callback
 
 ## Tests
 
-`npm test` runs 61 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
+`npm test` runs 91 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
 
 The 2.1 regression suite additionally verifies no-motion single-click serves and returns with 0–200 ms reaction delays, at least 8 successful connections in 10 repeated feeds, a deterministic 40-second rally without precision aiming, mouse-intent shot variety, no-input/behind-player/out-of-reach rejection, strict-mode preservation, input buffering and capture-warp filtering.
+
+The 2.2 suite verifies net-safe downward smashes from nine court/height combinations, short-vs-deep landing separation, low-contact fallbacks, timed pace, queued intents, full-engine F/RMB returns, all four training feeds, smash winner scoring/reset, AI shot variation and short-shot memory, browser-shortcut handling and Simulation isolation.
 
 Browser smoke tests:
 
@@ -122,7 +137,7 @@ npx playwright install --with-deps chromium
 npm run test:browser
 ```
 
-Six browser smoke tests check mode/difficulty selection, mouse capture, pause/return, settings persistence, small-screen overflow, V2 training progress and string-bed feedback, plus an actual Assisted shuttle return using browser mouse input. Software-rendered Chromium may require longer timeouts than a hardware-accelerated desktop browser.
+Seven browser smoke tests check mode/difficulty selection, mouse capture, pause/return, settings persistence, small-screen overflow, V2 training progress and string-bed feedback, plus an actual Assisted shuttle return using browser mouse input. They also play a smash with F and a drop with right-click through real browser input. Software-rendered Chromium may require longer timeouts than a hardware-accelerated desktop browser.
 
 ## Scope and next steps
 

@@ -9,15 +9,24 @@ export const drills: Record<TrainingShot, Drill> = {
   Smash: { minZ: -5.3, maxZ: -2.0, halfWidth: 2.59, startZ: 4.5, loft: 15, feedLandingZ: 6.7, instruction: 'Raise the racket, then accelerate down through the cork.', targetLabel: 'ATTACKING ZONE' },
   'Net shot': { minZ: -1.5, maxZ: -0.15, halfWidth: 2.59, startZ: 1.9, loft: 7, feedLandingZ: 3.5, instruction: 'Stay close. A short reach and a quiet touch.', targetLabel: 'TIGHT TO THE NET' },
 };
+export function drillInstruction(shot: TrainingShot, assisted = false) {
+  if (!assisted) return drills[shot].instruction;
+  return {
+    Clear: 'Left-click for a deep return. Aim into the back-court zone.',
+    Drop: 'Right-click with high contact. Bring it down into the front court.',
+    Smash: 'Press F on the high-ball cue. A fresh press adds attacking pace.',
+    'Net shot': 'Stay close and right-click. A quiet touch, just over the tape.',
+  }[shot];
+}
 export function insideTarget(shot: TrainingShot, x: number, z: number) {
   const d = drills[shot]; return Math.abs(x) <= d.halfWidth && z >= d.minZ && z <= d.maxZ;
 }
-export function assessDrill(goal: TrainingShot, actual: ShotType | null, x: number, z: number, crossedNet: boolean) {
+export function assessDrill(goal: TrainingShot, actual: ShotType | null, x: number, z: number, crossedNet: boolean, assisted = false) {
   const inCourt = crossedNet && Math.abs(x) <= 2.61 && z <= 0 && z >= -6.72;
   const matched = actual === goal;
   const onTarget = inCourt && insideTarget(goal, x, z);
   const success = matched && onTarget;
-  const feedback = !actual ? 'Find the shuttle with the string bed.' : !inCourt ? 'Watch the landing. Keep your next shot inside the lines.' : !matched ? `That was a ${actual.toLowerCase()}. ${drills[goal].instruction}` : !onTarget ? `Good ${goal.toLowerCase()}. Now find the highlighted zone.` : 'Shot and placement. That’s the feeling.';
+  const feedback = !actual ? 'Find the shuttle with the string bed.' : !inCourt ? 'Watch the landing. Keep your next shot inside the lines.' : !matched ? `That was a ${actual.toLowerCase()}. ${drillInstruction(goal, assisted)}` : !onTarget ? `Good ${goal.toLowerCase()}. Now find the highlighted zone.` : 'Shot and placement. That’s the feeling.';
   return { matched, onTarget, success, feedback };
 }
 export function contactAdvice(quality: ContactQuality | null, shot: ShotType | null) {

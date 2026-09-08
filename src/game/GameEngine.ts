@@ -11,7 +11,7 @@ import { RallyTransition } from './match/RallyTransition';
 import { servicePositions } from './match/ServeSystem';
 import { racketContact, netCrossing } from './physics/CollisionSystem';
 import { InputManager } from './input/InputManager';
-import { predictFlight, planReturn } from './ai/Prediction';
+import { predictFlight, planReturn, planIntercept } from './ai/Prediction';
 import { drills, assessDrill, contactAdvice } from './training/Drills';
 import { audio } from './audio/AudioManager';
 export class GameEngine {
@@ -48,7 +48,7 @@ export class GameEngine {
       this.player.pitch = -0.06; this.opponent.position.copy(positions.opponent); this.ends = this.match.score.ends;
       this.racket = new RacketController(); this.guide = new GuidedSwing(); // No velocity impulse from re-positioning between points.
     }
-    useGameStore.setState({ reachReady: false, swingReady: false, rally: 0, rallyActive: false, message: state.mode === 'match' ? this.match.score.server === 0 ? 'Your serve' : 'Opponent serving' : 'Find your rhythm' });
+    useGameStore.setState({ reachReady: false, swingReady: false, smashReady: false, selectedShot: 'rally', rally: 0, rallyActive: false, message: state.mode === 'match' ? this.match.score.server === 0 ? 'Your serve' : 'Opponent serving' : 'Find your rhythm' });
   }
   serve() {
     const state = useGameStore.getState(); this.match.start(); this.playerShot = null; this.showLanding = false;
@@ -66,7 +66,12 @@ export class GameEngine {
       const target = state.mode === 'match' ? new Vector3(-this.opponent.position.x, 0, 5.2)
         : new Vector3(this.player.position.x + 0.34, 0, state.mode === 'training' ? drill.feedLandingZ : Math.min(7.7, this.player.position.z + 1.8));
       const loft = state.mode === 'training' ? drill.loft : 11;
-      this.shuttle.reset(from, planReturn(from, target, loft).velocity);
+      // Overhead drills need a descending contact in front of the player, not a floor
+      // target that carries a high feed behind their head before it enters racket reach.
+      const overheadFeed = state.mode === 'training' && state.trainingShot === 'Smash' && state.settings.controls === 'assisted';
+      const launch = overheadFeed ? planIntercept(from, new Vector3(this.player.position.x + 0.2, 2.7, this.player.position.z - 0.85), 12).velocity
+        : planReturn(from, target, loft).velocity;
+      this.shuttle.reset(from, launch);
       this.shuttle.lastHit = 1; this.shuttle.served = true; this.shuttle.hitCooldown = 0.35;
       this.match.hits = 1; this.opponent.swing = 1; this.opponent.contactPoint.copy(from); audio.sound('hit', 15, from);
       useGameStore.setState({ message: '' });
@@ -88,9 +93,11 @@ export class GameEngine {
     const state = useGameStore.getState(), input = this.input!;
     if (state.phase !== 'playing') return;
     const assisted = state.settings.controls === 'assisted';
-    const pressed = input.swingPressed || (input.swinging && !this.wasSwinging);
-    this.guide.input(dt, !!pressed, input.swinging, dx, dy); input.swingPressed = false;
-    this.contactPulse = Math.max(0, this.contactPulse - dt * 2.2);
+    const requested = input.pendingShot ?? undefined;
+    const pressed = requested !== undefined || input.swingPressed || (input.swinging && !this.wasSwinging);
+    this.guide.input(dt, !!pressed, input.swinging || !!input.dropHeld || input.keys.has('KeyF'), dx, dy, requested ?? (input.dropHeld ? 'drop' : input.keys.has('KeyF') ? 'smash' : undefined));
+    input.swingPressed = false; input.pendingShot = null;
+    this.contactPulse = Math.max(0, this.contactPulse - dt * 1.4);
     this.time += dt; this.cooldown -= dt; this.squeakTimer -= dt;
     const transition = this.transition.step(dt);
     if (transition.prepare) this.ready();
@@ -115,7 +122,7 @@ export class GameEngine {
     }
     input.serve = false; this.netMotion *= Math.exp(-3 * dt);
     if (this.shuttle.active) this.updateFlight(dt, serving);
-    else if (!this.transition.active) this.opponent.step(dt, this.shuttle, this.player.position, state.settings.difficulty, this.match.hits, state.settings.controls === 'assisted' || state.mode === 'practice');
+    else if (!this.transition.active) this.opponent.step(dt, this.shuttle, this.player.position, state.settings.difficulty, this.match.hits, state.settings.controls === 'assisted' || state.mode === 'practice', state.mode === 'practice');
     this.publish(dt);
   }
   private updateFlight(dt: number, serving: boolean) {
@@ -129,11 +136,11 @@ export class GameEngine {
     if (contact) {
       const doubleHit = this.match.hits > 0 && previousHitter === 0 && state.mode === 'match';
       this.contactPulse = 1; this.match.hits++; this.swingContact = true; this.playerShot = contact.shot;
-      audio.sound('hit', contact.speed, this.shuttle.position);
+      audio.sound(contact.shot === 'Smash' ? 'smash' : 'hit', contact.speed, this.shuttle.position);
       useGameStore.setState((s) => ({
         contact: contact.quality, shot: contact.shot, speed: contact.speed * 3.6, contacts: s.contacts + 1,
         trainingHits: s.trainingHits + Number(s.mode === 'training' && contact.shot === s.trainingShot),
-        impactPoint: contact.point, feedback: contactAdvice(contact.quality, contact.shot), rally: this.match.hits, message: '',
+        impactPoint: contact.point, timedContact: contact.timed ?? false, feedback: contact.feedback ?? contactAdvice(contact.quality, contact.shot), rally: this.match.hits, message: '',
       }));
       if (doubleHit) { this.end(1, 'Double contact'); return; }
       if (serving && this.shuttle.position.y > 1.15) { this.end(1, 'Service too high'); return; }
@@ -142,7 +149,7 @@ export class GameEngine {
     if (crossing === 'under') { this.end(this.shuttle.lastHit === 0 ? 1 : 0, 'Under the net'); return; }
     if (crossing === 'net' || crossing === 'tape') { this.netMotion = crossing === 'tape' ? 0.65 : 1; audio.sound('net', 1, this.shuttle.position); }
     if (crossing === 'over' || crossing === 'tape') this.shuttle.crossedNet = true;
-    if (state.mode !== 'training' && this.opponent.step(dt, this.shuttle, this.player.position, state.settings.difficulty, this.match.hits, state.settings.controls === 'assisted' || state.mode === 'practice')) {
+    if (state.mode !== 'training' && this.opponent.step(dt, this.shuttle, this.player.position, state.settings.difficulty, this.match.hits, state.settings.controls === 'assisted' || state.mode === 'practice', state.mode === 'practice')) {
       this.match.hits++; audio.sound('hit', this.shuttle.velocity.length(), this.shuttle.position); useGameStore.setState({ rally: this.match.hits });
     }
     if (this.shuttle.position.y < 0.035 || Math.abs(this.shuttle.position.z) > 12 || Math.abs(this.shuttle.position.x) > 9) {
@@ -158,7 +165,7 @@ export class GameEngine {
       if (this.shuttle.active && state.mode !== 'match' && state.settings.landing) {
         this.landing.copy(predictFlight(this.shuttle.position, this.shuttle.velocity).landing); this.landing.y = 0.025; this.showLanding = true;
       }
-      useGameStore.setState({ bestRally: Math.max(state.bestRally, this.match.hits), reachReady: this.guide.reachable && this.shuttle.active, swingReady: this.guide.armed, contactPulse: this.contactPulse, racketSpeed: this.racket.velocity.length() * 3.6, courtFade: this.transition.opacity,
+      useGameStore.setState({ bestRally: Math.max(state.bestRally, this.match.hits), smashReady: this.guide.smashReady && this.shuttle.active, selectedShot: this.guide.intent, reachReady: this.guide.reachable && this.shuttle.active, swingReady: this.guide.armed, contactPulse: this.contactPulse, racketSpeed: this.racket.velocity.length() * 3.6, courtFade: this.transition.opacity,
         nextFeed: !this.shuttle.active && state.mode !== 'match' ? Math.max(0, this.cooldown) : 0 });
       audio.volume(state.settings.volume); audio.listener(this.player.head, this.forward.set(0, 0, -1).applyQuaternion(this.player.rotation));
     }
@@ -171,16 +178,19 @@ export class GameEngine {
     const state = useGameStore.getState();
     useGameStore.setState({ rallies: state.rallies + 1, bestRally: Math.max(state.bestRally, this.match.hits) });
     if (state.mode === 'match') {
+      const winnerShot = winner === 0 && reason === 'In' && this.shuttle.lastHit === 0 && this.playerShot !== null;
+      if (winnerShot) useGameStore.setState({ winners: state.winners + 1, smashWinners: state.smashWinners + Number(this.playerShot === 'Smash'), touchWinners: state.touchWinners + Number(this.playerShot === 'Drop' || this.playerShot === 'Net shot') });
+      const resultText = winnerShot ? `${this.playerShot} winner` : reason;
       const prevGame = this.match.score.game;
       this.match.point(winner); const s = this.match.score;
       useGameStore.setState({ score: s.points, games: s.games, game: s.game, server: s.server, gameHistory: s.history,
-        rallyActive: false, message: `${reason} · ${winner === 0 ? 'Your point' : 'Opponent’s point'}${s.game !== prevGame ? ' · Change ends' : ''}`, winner: s.winner });
+        rallyActive: false, message: `${resultText} · ${winner === 0 ? 'Your point' : 'Opponent’s point'}${s.game !== prevGame ? ' · Change ends' : ''}`, winner: s.winner });
       if (s.winner !== null) {
         useGameStore.setState({ phase: 'result' }); if (typeof document !== 'undefined') document.exitPointerLock(); audio.suspend(); return;
       }
       this.transition.begin();
     } else {
-      const assessment = assessDrill(state.trainingShot, this.playerShot, this.shuttle.position.x, this.shuttle.position.z, this.shuttle.crossedNet);
+      const assessment = assessDrill(state.trainingShot, this.playerShot, this.shuttle.position.x, this.shuttle.position.z, this.shuttle.crossedNet, state.settings.controls === 'assisted');
       const inCourt = this.shuttle.lastHit === 0 && this.shuttle.crossedNet && Math.abs(this.shuttle.position.x) <= 2.61 && this.shuttle.position.z >= -6.72 && this.shuttle.position.z < 0;
       if (state.mode === 'training') {
         const success = assessment.success && this.shuttle.lastHit === 0;

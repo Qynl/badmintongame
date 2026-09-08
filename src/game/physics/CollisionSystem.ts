@@ -2,7 +2,7 @@ import { MathUtils, Quaternion, Vector3 } from 'three';
 import type { RacketController } from '../player/RacketController';
 import type { ShuttlecockPhysics } from '../shuttle/ShuttlecockPhysics';
 import type { ContactQuality, ShotType } from '../../state/gameStore';
-export interface Contact { quality: ContactQuality; shot: ShotType; speed: number; offset: number; point: [number, number]; incidence: number }
+export interface Contact { quality: ContactQuality; shot: ShotType; speed: number; offset: number; point: [number, number]; incidence: number; timed?: boolean; feedback?: string }
 const a = new Vector3(), b = new Vector3(), p = new Vector3(), inv = new Quaternion(), relative = new Vector3();
 export function racketContact(shuttle: ShuttlecockPhysics, racket: RacketController): Contact | null {
   if (!shuttle.active || shuttle.hitCooldown > 0) return null;
@@ -37,10 +37,11 @@ export function racketContact(shuttle: ShuttlecockPhysics, racket: RacketControl
   const speed = outgoing.length();
   return { quality, shot: wasServe ? 'Serve' : classifyShot(outgoing, shuttle.position), speed, offset, point: [p.x / racket.radiusX, p.y / racket.radiusY], incidence: timing };
 }
-export function classifyShot(velocity: Vector3, position: Vector3): ShotType {
+export function classifyShot(velocity: Vector3, position: Vector3, landing?: Vector3): ShotType {
   const speed = velocity.length(), slope = velocity.y / Math.max(0.1, Math.hypot(velocity.x, velocity.z));
-  if (position.y > 2.0 && slope < -0.2 && speed > 16) return 'Smash';
+  if (position.y > 2.0 && velocity.y < -0.2 && speed > 22) return 'Smash';
   if (Math.abs(position.z) < 2.2 && speed < 8) return 'Net shot';
+  if (landing && landing.z * position.z < 0 && Math.abs(landing.z) < 2.1 && position.y > 1.5) return 'Drop';
   if (slope > 0.48) return position.y < 1.5 ? 'Lift' : 'Clear';
   if (speed < 11 && position.y > 1.6) return 'Drop';
   if (speed < 13) return 'Push';

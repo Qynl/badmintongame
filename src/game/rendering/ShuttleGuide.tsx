@@ -23,9 +23,9 @@ export function ShuttleGuide({ engine }: { engine: GameEngine }) {
     x = MathUtils.clamp(x, size.width * 0.06, size.width * 0.94); y = MathUtils.clamp(y, size.height * 0.16, size.height * 0.76);
     element.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
     const incoming = engine.shuttle.lastHit === 1 || !engine.shuttle.served;
-    element.className = `shuttle-tracker ${offscreen ? 'offscreen' : ''} ${engine.guide.reachable && incoming ? 'within-reach' : ''}`;
+    element.className = `shuttle-tracker ${offscreen ? 'offscreen' : ''} ${engine.guide.reachable && incoming ? 'within-reach' : ''} ${engine.guide.smashReady && incoming ? 'smash-window' : ''}`;
     if (arrow.current) arrow.current.style.transform = `rotate(${Math.atan2(local.x, local.y) * 180 / Math.PI}deg)`;
-    if (label.current) label.current.textContent = offscreen ? behind ? 'TURN TO THE SHUTTLE' : point.y > 0.7 ? 'LOOK UP' : point.x < 0 ? 'LOOK LEFT' : 'LOOK RIGHT' : incoming && engine.guide.reachable ? 'CLICK TO HIT' : '';
+    if (label.current) label.current.textContent = offscreen ? behind ? 'TURN TO THE SHUTTLE' : point.y > 0.7 ? 'LOOK UP' : point.x < 0 ? 'LOOK LEFT' : 'LOOK RIGHT' : incoming && engine.guide.smashReady ? 'F · SMASH' : incoming && engine.guide.reachable ? 'LMB · RALLY   RMB · DROP' : '';
   });
   return <Html fullscreen calculatePosition={() => [size.width / 2, size.height / 2]} zIndexRange={[1, 1]} style={{ pointerEvents: 'none' }}><div className="shuttle-guide-layer" aria-hidden="true"><div ref={marker} className="shuttle-tracker"><span className="tracker-ring"/><span className="tracker-arrow" ref={arrow}>↑</span><span className="tracker-label" ref={label}/></div></div></Html>;
 }

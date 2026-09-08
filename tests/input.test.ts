@@ -31,3 +31,22 @@ describe('pointer capture and click intent', () => {
     expect(input.swingPressed).toBe(false); expect(input.keys.size).toBe(0); expect(unlocked).toHaveBeenCalledOnce();
   });
 });
+describe('dedicated assisted shot inputs', () => {
+  it('queues F without requiring a mouse click', () => {
+    doc.dispatchEvent(Object.assign(new Event('keydown', { cancelable: true }), { code: 'KeyF', repeat: false }));
+    expect(input.pendingShot).toBe('smash'); expect(input.swinging).toBe(false);
+  });
+  it('keeps browser find shortcuts intact', () => {
+    const e = Object.assign(new Event('keydown', { cancelable: true }), { code: 'KeyF', repeat: false, ctrlKey: true });
+    doc.dispatchEvent(e); expect(input.pendingShot).toBeNull(); expect(input.keys.has('KeyF')).toBe(false); expect(e.defaultPrevented).toBe(false);
+  });
+  it('queues a right-click touch and suppresses the context menu only in game', () => {
+    doc.dispatchEvent(Object.assign(new Event('mousedown'), { button: 2 }));
+    expect(input.pendingShot).toBe('drop'); expect(input.dropHeld).toBe(true);
+    const context = new Event('contextmenu', { cancelable: true }); doc.dispatchEvent(context); expect(context.defaultPrevented).toBe(true);
+    doc.dispatchEvent(Object.assign(new Event('mouseup'), { button: 2 })); expect(input.dropHeld).toBe(false);
+    doc.pointerLockElement = null; doc.dispatchEvent(new Event('pointerlockchange'));
+    const menuContext = new Event('contextmenu', { cancelable: true }); doc.dispatchEvent(menuContext); expect(menuContext.defaultPrevented).toBe(false);
+    expect(input.pendingShot).toBeNull();
+  });
+});

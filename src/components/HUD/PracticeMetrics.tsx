@@ -1,6 +1,6 @@
 import { Crosshair, SlidersHorizontal, Target, Timer, TrendingUp } from 'lucide-react';
 import { useGameStore } from '../../state/gameStore';
-import { drills } from '../../game/training/Drills';
+import { drills, drillInstruction } from '../../game/training/Drills';
 export function StringBedImpact() {
   const point = useGameStore((s) => s.impactPoint), contact = useGameStore((s) => s.contact);
   const x = point ? 38 + Math.max(-1, Math.min(1, point[0])) * 27 : 38;
@@ -35,11 +35,12 @@ export function PracticeMetrics() {
   </aside>}{mode === 'training' && <TrainingGoal/>}</>;
 }
 function TrainingGoal() {
+  const assisted = useGameStore((s) => s.settings.controls === 'assisted');
   const shot = useGameStore((s) => s.trainingShot), attempts = useGameStore((s) => s.trainingAttempts);
   const success = useGameStore((s) => s.trainingSuccess), streak = useGameStore((s) => s.trainingStreak);
   const drill = drills[shot], percentage = attempts > 0 ? Math.round(success / attempts * 100) : 0;
   return <aside className="drill-card" aria-label={`${shot} training progress`}><div className="drill-eyebrow"><Target size={15}/> THE {shot.toUpperCase()} SESSION</div>
-    <h3>{drill.targetLabel.toLowerCase()}.</h3><p>{drill.instruction}</p>
+    <h3>{drill.targetLabel.toLowerCase()}.</h3><p>{drillInstruction(shot, assisted)}</p>
     <div className="drill-progress"><div><strong>{success}<span> / {attempts}</span></strong><small>SHOT + TARGET</small></div><div><strong>{percentage}<span>%</span></strong><small>ACCURACY</small></div></div>
     <div className="accuracy-track"><span style={{ width: `${percentage}%` }}/></div><div className="drill-streak"><TrendingUp size={12}/>{streak > 0 ? `${streak} in a row. Keep the feeling.` : 'Right shot. Right landing. Both count.'}</div>
   </aside>;
