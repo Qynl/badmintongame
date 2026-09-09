@@ -113,7 +113,7 @@ it('turns a real high reply into a smash winner and resets its statistics for a 
     const e = new GameEngine(); e.input = { keys: new Set(), locked: true, swinging: false, serve: false, dx: 0, dy: 0, jump: false } as InputManager;
     e.frame(1 / 120); e.cooldown = 0; e.input.serve = true;
     for (let i = 0; i < 2000; i++) {
-      if (e.guide.smashReady && useGameStore.getState().contacts === 1) e.input.keys.add('KeyF');
+      if (e.guide.smashReady && useGameStore.getState().contacts === 1) { e.input.keys.add('KeyF'); random.mockReturnValue(0); }
       e.frame(1 / 120);
       if (useGameStore.getState().contacts === 2) random.mockReturnValue(0);
       if (useGameStore.getState().rallies) break;

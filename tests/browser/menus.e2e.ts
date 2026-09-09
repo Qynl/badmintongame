@@ -36,7 +36,8 @@ test('first-person session captures the mouse and pauses cleanly', async ({ page
 });
 test('small-screen menus do not overflow horizontally', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(() => document.fonts.ready);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole('button', { name: 'Let’s play', exact: true })).toBeVisible();
 });
 test('V2 training exposes target progress and a real string-bed display', async ({ page }) => {
@@ -63,6 +64,9 @@ test('Assisted is the default and a held mouse button actually returns a shuttle
   await page.mouse.down();
   const contacts = page.locator('.metric-row').filter({ hasText: 'Racket contacts' }).locator('strong');
   await expect(contacts).not.toHaveText('0', { timeout: 90000 });
+  await expect(page.getByRole('complementary', { name: 'Rally Run challenge' })).toBeVisible();
+  await expect(page.locator('.run-score > strong')).not.toHaveText('0', { timeout: 90000 });
+  await page.screenshot({ path: test.info().outputPath('rally-run.png') });
   await page.mouse.up();
   await page.evaluate(() => document.exitPointerLock());
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -87,5 +91,16 @@ test('F smash and right-click drop work as separate assisted actions in the brow
   await page.mouse.down({ button: 'right' });
   await expect(page.locator('.contact-result > small')).toHaveText('Drop', { timeout: 90000 });
   await page.mouse.up({ button: 'right' });
+  await page.evaluate(() => document.exitPointerLock());
+});
+test('Quick Duel and full club rules are selectable and reflected on court', async ({ page }) => {
+  await page.getByRole('button', { name: 'Let’s play', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Quick duel/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: /Club match/ }).click();
+  await expect(page.getByRole('button', { name: /Club match/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: /^Quick duel/ }).click();
+  await page.getByRole('button', { name: 'Step onto the court', exact: true }).click();
+  await expect(page.getByText('QUICK DUEL · FIRST TO 7', { exact: true })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('quick-duel.png') });
   await page.evaluate(() => document.exitPointerLock());
 });

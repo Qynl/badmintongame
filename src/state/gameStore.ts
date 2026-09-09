@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { RallyRun } from '../game/training/RallyRun';
 import type { AssistedShot } from '../game/player/ShotPlanner';
 
 export type Mode = 'match' | 'practice' | 'training';
@@ -28,20 +29,22 @@ function savedSettings(): Settings {
 const freshSession = () => ({
   score: [0, 0] as [number, number], games: [0, 0] as [number, number], game: 1, server: 0 as 0 | 1,
   gameHistory: [] as [number, number][], rally: 0, rallyActive: false, message: 'Your court. Your rhythm.',
+  run: null as ReturnType<RallyRun['snapshot']> | null,
   contact: null as ContactQuality | null, shot: null as ShotType | null, speed: 0, racketSpeed: 0, contacts: 0,
   trainingHits: 0, trainingAttempts: 0, trainingSuccess: 0, trainingStreak: 0, trainingBestStreak: 0,
   winner: null as 0 | 1 | null, impactPoint: null as [number, number] | null,
-  feedback: '', lastLanding: null as 'Target' | 'In' | 'Out' | null, nextFeed: 0, courtFade: 0, rallies: 0, bestRally: 0, swingReady: false, reachReady: false, contactPulse: 0, smashReady: false, selectedShot: 'rally' as AssistedShot, timedContact: false, winners: 0, smashWinners: 0, touchWinners: 0,
+  feedback: '', lastLanding: null as 'Target' | 'In' | 'Out' | null, nextFeed: 0, courtFade: 0, rallies: 0, bestRally: 0, swingReady: false, reachReady: false, contactPulse: 0, smashReady: false, selectedShot: 'rally' as AssistedShot, timedContact: false, opponentShot: '' as string, replyPulse: 0, winners: 0, smashWinners: 0, touchWinners: 0,
 });
 type SessionState = ReturnType<typeof freshSession>;
 interface GameStore extends SessionState {
   phase: 'menu' | 'playing' | 'paused' | 'result';
+  matchFormat: 'duel' | 'classic'; setMatchFormat: (format: 'duel' | 'classic') => void;
   mode: Mode; settings: Settings; trainingShot: TrainingShot; session: number;
   start: (mode: Mode) => void; pause: () => void; resume: () => void; home: () => void;
   setSettings: (settings: Partial<Settings>) => void; setTrainingShot: (shot: TrainingShot) => void;
 }
 export const useGameStore = create<GameStore>((set) => ({
-  ...freshSession(), phase: 'menu', mode: 'match', settings: savedSettings(), trainingShot: 'Clear', session: 0,
+  ...freshSession(), matchFormat: 'duel', setMatchFormat: (matchFormat) => set({ matchFormat }), phase: 'menu', mode: 'match', settings: savedSettings(), trainingShot: 'Clear', session: 0,
   start: (mode) => set((s) => ({ ...freshSession(), phase: 'playing', mode, session: s.session + 1 })),
   pause: () => set((s) => s.phase === 'playing' ? { phase: 'paused' } : {}),
   resume: () => set({ phase: 'playing' }),

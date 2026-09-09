@@ -7,7 +7,7 @@ import { Settings } from './Settings';
 import { HowToPlay } from './HowToPlay';
 import { Setup } from './Setup';
 const modes = [
-  { id: 'match' as Mode, label: 'Play a match', sub: 'You. An opponent. 21 points.', icon: Trophy, number: '01' },
+  { id: 'match' as Mode, label: 'Play a match', sub: 'Quick duel. Proper rivalry.', icon: Trophy, number: '01' },
   { id: 'practice' as Mode, label: 'Free practice', sub: 'Find your rhythm. No pressure.', icon: InfinityIcon, number: '02' },
   { id: 'training' as Mode, label: 'Shot training', sub: 'Small details. Better game.', icon: Target, number: '03' },
 ];
@@ -24,7 +24,7 @@ export function MainMenu() {
       <div className="court-caption"><div className="court-caption-top"><span className="live-dot"/> THE FEATHER CLUB <span className="caption-line"/></div><div className="court-caption-title">Home court.<br/>Away from everything.</div><p>INDOOR HALL <span> / </span> COURT 01</p><div className="venue-coordinates"><span>6.10 M × 13.40 M</span><ShuttleIcon size={25}/></div></div>
       <section className="mode-section"><div className="section-heading"><span>FIND YOUR GAME</span><span>THREE WAYS TO STEP IN <ArrowRight size={13}/></span></div><div className="mode-cards" role="group" aria-label="Game mode">{modes.map((item) => <button key={item.id} className={`mode-card ${mode === item.id ? 'selected' : ''}`} aria-pressed={mode === item.id} onClick={() => setMode(item.id)}><div className="mode-card-top"><item.icon size={22} strokeWidth={1.4}/><span>{item.number}</span></div><div className="mode-card-title">{item.label}<MoveUpRight size={17}/></div><p>{item.sub}</p><span className="selection-line"/></button>)}</div></section>
     </div>
-    <footer className="menu-footer"><div className="footer-message"><span className="footer-mark">F.</span><span>A LITTLE CLOSER TO THE REAL THING.</span></div><button className="headphone-note" onClick={() => setPanel('guide')}><Headphones size={15}/><span>Best experienced with headphones</span><CircleHelp size={13}/></button><div className="version"><span className="live-dot"/> IN DEVELOPMENT <span> / </span> V.2.2</div></footer>
+    <footer className="menu-footer"><div className="footer-message"><span className="footer-mark">F.</span><span>A LITTLE CLOSER TO THE REAL THING.</span></div><button className="headphone-note" onClick={() => setPanel('guide')}><Headphones size={15}/><span>Best experienced with headphones</span><CircleHelp size={13}/></button><div className="version"><span className="live-dot"/> IN DEVELOPMENT <span> / </span> V.2.3</div></footer>
     {panel === 'settings' && <Settings onClose={close}/>} {panel === 'guide' && <HowToPlay onClose={close}/>} {panel === 'setup' && <Setup mode={mode} onClose={close}/>}
   </main>;
 }

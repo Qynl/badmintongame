@@ -1,6 +1,19 @@
-# Feather 2.2 — Shot choice update
+# Feather 2.3 — Rally & rivalry
 
 A playable first-person badminton prototype for desktop browsers. Built with React 19, Vite, TypeScript, Three.js, React Three Fiber, drei, and Zustand. The menu is a live view of the same court used in gameplay—not a background image.
+
+## 2.3: a smash starts a fight, not an automatic point
+
+**Try Assisted + Quick Duel. Aim away from the defender, follow a block forward, and recover for the next shot.** Quick Duel is the default match format; Club Match preserves regulation 21-point, best-of-three play.
+
+- **Positional smash defense:** the AI searches descending contact windows with an acceleration/reach budget, reacts sooner to fast attacks, and can dig out low shots. Removed the blanket extra random miss penalty for smash speed. A timed lunge has finite stamina and slower recovery; there is no teleport or across-court hit. Body attacks are returnable; wide attacks against a displaced defender remain winners. All difficulties retain execution mistakes.
+- **Counterplay:** opponents absorb smashes into short blocks or defensive lifts, and can attack a short high reply with a physically checked downward smash. Readable racket preparation, lunge poses, and brief reply cues help you react. Neutral free-practice feeds remain forgiving.
+- **Quick Duel:** first to seven, win by two, cap at eleven, one game, change ends at four. Choose **Club Match** in setup for 21 points / cap 30 / best of three. Game/match-point and deciding-point cues, correct result scores and same-format rematches are included.
+- **Rally Run in Free Practice:** build a chain of legal returns, complete three rotating shot challenges, mix shot families for bonuses, and finish a rally for +100. Only an opponent return or a legal winning landing validates a stroke—not pressing a button or selecting a shot. A rally ends the run; your personal best is stored locally on the device. Practice points never alter badminton scoring. Hide the challenge with readability guides if you want an uncluttered practice court.
+- Simulation remains mouse-driven. No strength nerf, new camera shake, flight steering, or change to player contact reach.
+- Updated Vitest to a patched release; clean dependency install, production build, and audit verified.
+
+The automated defense fixtures test centered and displaced defenders, several difficulties, seeded misses, valid net crossings, counterattacks, and an entire smash → block → moving-player-return exchange. These establish mechanics, not a claim that subjective fun or every opponent matchup is fully calibrated.
 
 ## 2.2: build a point, not just a rally
 
@@ -45,7 +58,7 @@ npm install
 npm run dev       # 0.0.0.0:5173; supports the Arena preview host
 npm run build     # type-check + production bundle
 npm run preview
-npm test          # 91 simulation/input/rules/integration tests
+npm test          # 110 simulation/input/rules/integration tests
 ```
 
 Desktop keyboard, mouse, WebGL 2 and hardware acceleration are required for gameplay. The menus adapt to small screens; touch gameplay is not implemented. Fonts and procedural assets are bundled locally. There are no asset CDN, backend, account, or API-key requirements.
@@ -72,8 +85,8 @@ Desktop keyboard, mouse, WebGL 2 and hardware acceleration are required for game
 
 ## Modes
 
-- **Match:** singles against a predictive opponent; three difficulties; rally scoring to 21, win by two, cap at 30, best of three; diagonal service, automatic opponent service, double-contact/net/out faults, changing ends, and match results.
-- **Free practice:** unscored AI rallies with automatic feeds. Toggle the shuttle trail, landing prediction and live contact metrics.
+- **Match:** singles against a predictive opponent; three difficulties; Quick Duel to 7 (cap 11, one game) or regulation Club Match to 21 (cap 30, best of three), both win by two; diagonal service, automatic opponent service, double-contact/net/out faults, changing ends, and match results.
+- **Free practice:** AI rallies with automatic feeds and an optional Rally Run score challenge, separate from competitive scoring. Toggle the shuttle trail, landing prediction and live contact metrics.
 - **Shot training:** select clear, drop, smash or net shot. Repeated feeds and starting positions are tuned to the selected shot. Each drill highlights its own landing zone. The HUD separately tracks matched shot classifications, completed attempts, successful shot-plus-target landings, accuracy and streaks. A matching classification alone does **not** count as a successful drill. Press E to start a fresh feed without recording a failed attempt.
 - **Settings:** Assisted/Simulation controls, optional readability cues, performance/balanced/ultra rendering, volume, sensitivity, head motion and practice aids. Preferences persist locally.
 
@@ -124,11 +137,13 @@ High-frequency simulation stays in mutable engine objects and R3F frame callback
 
 ## Tests
 
-`npm test` runs 91 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
+`npm test` runs 110 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
 
 The 2.1 regression suite additionally verifies no-motion single-click serves and returns with 0–200 ms reaction delays, at least 8 successful connections in 10 repeated feeds, a deterministic 40-second rally without precision aiming, mouse-intent shot variety, no-input/behind-player/out-of-reach rejection, strict-mode preservation, input buffering and capture-warp filtering.
 
 The 2.2 suite verifies net-safe downward smashes from nine court/height combinations, short-vs-deep landing separation, low-contact fallbacks, timed pace, queued intents, full-engine F/RMB returns, all four training feeds, smash winner scoring/reset, AI shot variation and short-shot memory, browser-shortcut handling and Simulation isolation.
+
+The 2.3 suite adds positional smash defense, bounded movement, seeded placement comparisons, defensive reply variation, actual AI counterattacks, a full smash/block/return exchange, Rally Run validation and reset/storage behavior, and duel scoring/deuce/cap/end changes through the engine.
 
 Browser smoke tests:
 
@@ -137,7 +152,7 @@ npx playwright install --with-deps chromium
 npm run test:browser
 ```
 
-Seven browser smoke tests check mode/difficulty selection, mouse capture, pause/return, settings persistence, small-screen overflow, V2 training progress and string-bed feedback, plus an actual Assisted shuttle return using browser mouse input. They also play a smash with F and a drop with right-click through real browser input. Software-rendered Chromium may require longer timeouts than a hardware-accelerated desktop browser.
+Eight browser smoke tests check mode/difficulty selection, mouse capture, pause/return, settings persistence, small-screen overflow, V2 training progress and string-bed feedback, plus an actual Assisted shuttle return using browser mouse input. They also play a smash with F and a drop with right-click through real browser input, bank Rally Run points, and select Quick Duel versus Club Match. Software-rendered Chromium may require longer timeouts than a hardware-accelerated desktop browser.
 
 ## Scope and next steps
 

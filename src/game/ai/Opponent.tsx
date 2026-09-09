@@ -8,21 +8,24 @@ function Shoe() {
   return <group><mesh position={[0, 0.06, 0.045]} castShadow scale={[0.074, 0.067, 0.15]}><sphereGeometry args={[1, 16, 10]}/><meshStandardMaterial color="#d9dccb" roughness={0.72}/></mesh><mesh position={[0, 0.025, 0.045]} scale={[0.08, 0.025, 0.16]}><sphereGeometry args={[1, 16, 8]}/><meshStandardMaterial color="#b69c6e" roughness={0.94}/></mesh><mesh position={[0, 0.08, 0.105]} rotation={[-0.5, 0, 0]}><boxGeometry args={[0.076, 0.011, 0.064]}/><meshStandardMaterial color="#344b3c" roughness={0.8}/></mesh></group>;
 }
 export function Opponent({ engine, menu = false }: { engine: GameEngine; menu?: boolean }) {
-  const root = useRef<Group>(null), legs = [useRef<Group>(null), useRef<Group>(null)];
+  const root = useRef<Group>(null), body = useRef<Group>(null), legs = [useRef<Group>(null), useRef<Group>(null)];
   const racket = useRef<Group>(null), arm = useRef<Mesh>(null), forearm = useRef<Mesh>(null);
   const torso = useMemo(() => new LatheGeometry([new Vector2(0.15, 0), new Vector2(0.17, 0.08), new Vector2(0.2, 0.29), new Vector2(0.23, 0.42), new Vector2(0.19, 0.47), new Vector2(0.078, 0.52)], 20), []);
   const shoulder = new Vector3(0.22, 1.43, 0), elbow = new Vector3(), wrist = new Vector3(), center = new Vector3();
   useFrame(({ clock }) => {
     const ai = engine.opponent; if (root.current) { root.current.position.copy(menu ? new Vector3(-0.6, 0, -3.8) : ai.position); root.current.position.y += Math.sin(menu ? clock.elapsedTime * 1.7 : ai.stride * 2) * 0.012; }
+    const stretch = menu ? 0 : Math.sin(ai.lunge / 0.30 * Math.PI);
+    if (body.current) { body.current.position.y = -stretch * 0.14; body.current.rotation.z = -ai.velocity.x * stretch * 0.032; body.current.rotation.x = ai.velocity.z * stretch * 0.025; }
     const stride = menu ? 0 : Math.min(ai.velocity.length() / 3, 1) * 0.46;
     legs.forEach((leg, i) => { if (leg.current) leg.current.rotation.x = Math.sin(ai.stride + i * Math.PI) * stride; });
-    center.set(0.47, 1.55, 0.6);
+    center.set(0.47, ai.recovering > 0 ? 1.15 : 1.55, 0.6);
+    if (!menu && ai.swing === 0 && engine.shuttle.active && engine.shuttle.lastHit === 0) center.lerp(ai.racketTarget.clone().sub(ai.position).clampLength(0, 1.9), 0.32);
     if (ai.swing > 0 && !menu) center.lerp(ai.contactPoint.clone().sub(ai.position), Math.sin(ai.swing * Math.PI * 0.5));
     if (racket.current) { racket.current.position.copy(center); racket.current.rotation.set(-0.18 + ai.swing * 0.6, 0.12, -0.28); }
     wrist.set(0, -0.53, 0); if (racket.current) wrist.applyQuaternion(racket.current.quaternion); wrist.add(center);
     elbow.set(0.36, 1.09, 0.17).lerp(wrist, 0.24); positionLimb(arm.current, shoulder, elbow); positionLimb(forearm.current, elbow, wrist);
   });
-  return <group ref={root}>
+  return <group ref={root}><group ref={body}>
     <mesh geometry={torso} position={[0, 0.99, 0]} scale={[1, 1, 0.63]} castShadow><meshStandardMaterial color="#b7c7a5" roughness={0.93}/></mesh>
     {[-1, 1].map((side) => <group key={`sleeve-${side}`} position={[side * 0.218, 1.425, 0]} rotation={[0, 0, side * 0.35]}>
       <mesh position={[0, -0.025, 0]} castShadow><cylinderGeometry args={[0.083, 0.075, 0.17, 20]}/><meshStandardMaterial color="#b7c7a5" roughness={0.95}/></mesh>
@@ -49,5 +52,5 @@ export function Opponent({ engine, menu = false }: { engine: GameEngine; menu?: 
     <mesh ref={forearm} castShadow><cylinderGeometry args={[0.048, 0.029, 1, 12]}/><meshStandardMaterial color="#b18160" roughness={0.85}/></mesh>
     <group position={[-0.24, 1.43, 0]} rotation={[-0.32, 0, -0.15]}><mesh position={[0, -0.24, 0]} castShadow><capsuleGeometry args={[0.044, 0.43, 5, 12]}/><meshStandardMaterial color="#b18160" roughness={0.85}/></mesh><mesh position={[0, -0.48, 0]}><sphereGeometry args={[0.038, 12, 8]}/><meshStandardMaterial color="#b18160" roughness={0.8}/></mesh></group>
     <group ref={racket}><RacketModel color="#b5c6ae"/><mesh position={[0, -0.52, 0.02]}><capsuleGeometry args={[0.029, 0.046, 5, 10]}/><meshStandardMaterial color="#b18160" roughness={0.8}/></mesh></group>
-  </group>;
+  </group></group>;
 }

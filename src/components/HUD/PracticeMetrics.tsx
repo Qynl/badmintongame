@@ -1,4 +1,4 @@
-import { Crosshair, SlidersHorizontal, Target, Timer, TrendingUp } from 'lucide-react';
+import { Flame, Crosshair, SlidersHorizontal, Target, Timer, TrendingUp } from 'lucide-react';
 import { useGameStore } from '../../state/gameStore';
 import { drills, drillInstruction } from '../../game/training/Drills';
 export function StringBedImpact() {
@@ -32,7 +32,7 @@ export function PracticeMetrics() {
     <div className="metric-row"><span>Shuttle off strings</span><strong>{speed.toFixed(0)} <small>KM/H</small></strong></div>
     <div className="metric-row"><span>Racket contacts</span><strong>{contacts}</strong></div>
     <div className="contact-coach"><span>ONE SMALL ADJUSTMENT</span><p>{feedback || 'Move into position before you swing. The shuttle will come to you.'}</p></div>
-  </aside>}{mode === 'training' && <TrainingGoal/>}</>;
+  </aside>}{mode === 'training' && <TrainingGoal/>}{mode === 'practice' && <RunChallenge/>}</>;
 }
 function TrainingGoal() {
   const assisted = useGameStore((s) => s.settings.controls === 'assisted');
@@ -46,7 +46,20 @@ function TrainingGoal() {
   </aside>;
 }
 export function SessionStats() {
+  const run = useGameStore(s => s.run);
   const mode = useGameStore((s) => s.mode), rallies = useGameStore((s) => s.rallies), best = useGameStore((s) => s.bestRally);
   const success = useGameStore((s) => s.trainingSuccess), attempts = useGameStore((s) => s.trainingAttempts), streak = useGameStore((s) => s.trainingBestStreak);
-  return <div className="session-stats"><div><strong>{mode === 'training' ? `${success}/${attempts}` : rallies}</strong><span>{mode === 'training' ? 'ON TARGET' : 'RALLIES PLAYED'}</span></div><div><strong>{mode === 'training' ? streak : best}</strong><span>{mode === 'training' ? 'BEST STREAK' : 'LONGEST RALLY'}</span></div></div>;
+  return <div className="session-stats"><div><strong>{mode === 'training' ? `${success}/${attempts}` : rallies}</strong><span>{mode === 'training' ? 'ON TARGET' : 'RALLIES PLAYED'}</span></div><div><strong>{mode === 'training' ? streak : best}</strong><span>{mode === 'training' ? 'BEST STREAK' : 'LONGEST RALLY'}</span></div>{mode === 'practice' && run && <div><strong>{run.best}</strong><span>BEST RALLY RUN</span></div>}</div>;
+}
+
+function RunChallenge() {
+  const run = useGameStore(s => s.run), guides = useGameStore(s => s.settings.guides);
+  if (!run || !guides) return null;
+  return <aside className="drill-card run-card" aria-label="Rally Run challenge">
+    <div className="drill-eyebrow"><Flame size={15}/> RALLY RUN <span>BEST {run.best}</span></div>
+    <div className="run-score"><strong>{run.chain ? run.score : run.last}</strong><span>{run.chain ? `×${run.multiplier}` : 'READY'}<small>{run.chain ? 'MULTIPLIER' : run.last ? 'LAST RUN' : 'BUILD A CHAIN'}</small></span></div>
+    <h3>{run.objective.title}</h3><p>{run.objective.detail}</p>
+    <div className="run-pips">{[0, 1, 2].map(i => <i key={i} className={i < run.goals % 3 ? 'complete' : i === run.goals % 3 ? 'current' : ''}/>)}</div>
+    <div className="drill-streak">{run.reward}</div><small className="run-rule">Legal returns count. Mix shots for more points.<br/>Win the rally for +100. Beat your best run.</small>
+  </aside>;
 }
