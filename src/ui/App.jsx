@@ -403,7 +403,7 @@ function FullTimeScreen({ match, result, career, onContinue }) {
               <span className="pill">{human.stats.tacklesWon}/{human.stats.tackles} tackles</span>
               <span className="pill">{human.stats.interceptions} interceptions</span>
               <span className="pill">{(human.stats.distance / 1000).toFixed(1)} km</span>
-              <span className="pill">{Math.round(human.stamina * 100)}% stamina left</span>
+              <span className="pill">{Math.round(human.stamina)}% stamina left</span>
             </div>
           </div>
         )}

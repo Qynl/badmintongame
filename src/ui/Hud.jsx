@@ -85,8 +85,12 @@ export function Hud({ match, gameLoopRef, onPause, showRadar, showPerf, touch })
 
   // ---- High-frequency updates via direct DOM writes ----
   useEffect(() => {
-    if (!match || !gameLoopRef?.current) return;
-    const loop = gameLoopRef.current;
+    if (!match) return;
+    // NOTE: do NOT bail out when gameLoopRef.current is null. Child effects run
+    // before parent effects, so the GameLoop does not exist yet at this point,
+    // and a ref changing never re-runs an effect -- bailing here froze the
+    // entire HUD (clock, score, stamina, radar) for the whole match while the
+    // simulation ran on perfectly behind it. Read the loop lazily inside tick.
     let raf;
     let last = 0;
     const tick = (now) => {
@@ -94,6 +98,7 @@ export function Hud({ match, gameLoopRef, onPause, showRadar, showPerf, touch })
       // 15Hz is plenty for text; the 3D runs at full rate independently.
       if (now - last < 66) return;
       last = now;
+      const loop = gameLoopRef?.current ?? null;
 
       if (clockRef.current) {
         clockRef.current.textContent = fmtClock(match.matchSeconds, match);
@@ -112,7 +117,8 @@ export function Hud({ match, gameLoopRef, onPause, showRadar, showPerf, touch })
           if (roleRef.current) roleRef.current.textContent = `${p.position} · ${p.role ?? ''}`;
         }
         if (staminaRef.current) {
-          const s = Math.max(0, Math.min(1, p.stamina));
+          // stamina is stored 0..100, NOT 0..1.
+          const s = Math.max(0, Math.min(1, p.stamina / 100));
           staminaRef.current.style.width = `${s * 100}%`;
           staminaRef.current.style.background = s > 0.55 ? '#35d47a' : s > 0.28 ? '#ffb020' : '#ff4d5e';
           if (staminaValRef.current) staminaValRef.current.textContent = `${Math.round(s * 100)}%`;
@@ -145,7 +151,7 @@ export function Hud({ match, gameLoopRef, onPause, showRadar, showPerf, touch })
       if (radarRef.current) drawRadar(radarRef.current, match);
 
       // Perf
-      if (perfRef.current && showPerf) {
+      if (perfRef.current && showPerf && loop?.renderer) {
         const fps = loop.renderer.fps;
         const cls = fps > 50 ? 'ok' : fps > 30 ? 'warn' : 'bad';
         perfRef.current.innerHTML =

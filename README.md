@@ -101,6 +101,7 @@ team that makes better choices, not a team that has been given a hidden bonus.
 npm run test         # 14 simulation tests (node:test)
 npm run test:render  # 27 renderer/game-loop checks against a mocked WebGL context
 npm run test:ui      # 9 React screens rendered server-side
+npm run test:play    # 33 checks that mount the real app and play the game
 npm run test:all     # all of the above
 npm run diag 5       # play 5 matches, print statistics against real-world targets
 ```
@@ -110,6 +111,25 @@ and compares the output against the rates a real football match produces —
 goals, shots, pass completion, fouls, cards, corners, offsides, saves, tackles.
 Tuning the game means running it, finding the number that is wrong, tracing the
 cause, and fixing the underlying model rather than the number.
+
+`test:play` is the test that matters most for catching bugs a player would
+actually hit. It mounts the real `<App/>` in jsdom, clicks through the menu,
+kicks off, drives the genuine `requestAnimationFrame` game loop, holds keys
+down, opens the pause menu, changes tactics and formation mid-match, plays out
+a long run, and abandons the match — asserting on the live `Match` instance
+pulled out of the React fiber tree the whole way. It exists because fifty
+green unit tests once coexisted with a HUD that was frozen for an entire
+match: nothing that renders a component in isolation can catch that.
+
+Two things it taught the codebase, both now load-bearing:
+
+- The harness drives a **virtual clock**. The game loop derives its frame delta
+  from `performance.now()`, so firing rAF callbacks without advancing that clock
+  steps the simulation by zero and every physical quantity looks frozen.
+- Assertions must reconcile against the rules of football, not against
+  convenient constants. "Both teams have 11 players" is wrong — a team can be
+  down to ten after a red card. "Players are spread out" is wrong at kickoff,
+  when all 22 legitimately stand on the centre spot.
 
 There is no browser in CI, so `test:render` stands up enough of the DOM and a
 WebGL context for three.js to build a real scene graph, then drives the whole

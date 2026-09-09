@@ -488,7 +488,9 @@ export class Match {
       const nz = inp.moveZ / mag;
       intensity = clamp(mag, 0, 1) * (inp.sprint ? 1 : 0.68);
       // Sprinting costs extra stamina.
-      if (inp.sprint) p.stamina -= dt * 0.55;
+      // Extra cost of holding sprint, on the 0..100 stamina scale. Writing
+      // `dt * 0.55` here treated stamina as 0..1 and made sprinting free.
+      if (inp.sprint) p.stamina -= dt * 1.6;
       tx = p.x + nx * 14;
       tz = p.z + nz * 14;
     }

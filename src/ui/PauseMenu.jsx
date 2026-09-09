@@ -199,8 +199,8 @@ function SquadPanel({ match, gameLoopRef }) {
               <td className="dim">{p.position}</td>
               <td className="num">{overall(p.attrs, p.position)}</td>
               <td className="num" style={{ color: ratingColor(p.stats.rating) }}>{p.stats.rating.toFixed(1)}</td>
-              <td className="num" style={{ color: p.stamina < 0.3 ? '#ff4d5e' : p.stamina < 0.55 ? '#ffb020' : undefined }}>
-                {Math.round(p.stamina * 100)}
+              <td className="num" style={{ color: p.stamina < 30 ? '#ff4d5e' : p.stamina < 55 ? '#ffb020' : undefined }}>
+                {Math.round(p.stamina)}
               </td>
               <td className="num dim">{p.stats.passesCompleted}/{p.stats.passes}</td>
               <td className="num dim">{p.stats.tacklesWon}</td>
