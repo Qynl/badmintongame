@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0a0e14" />
+    <title>Pitchside — Football</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body, #root { height: 100%; margin: 0; padding: 0; }
+      body {
+        background: #0a0e14;
+        color: #e8edf4;
+        font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+      #boot {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        background: #0a0e14; z-index: 999; transition: opacity .4s;
+      }
+      #boot .b {
+        font: 700 13px/1 'Inter', sans-serif; letter-spacing: .5em;
+        text-transform: uppercase; 
+        color: #55e08a;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot"><div class="b">PITCHSIDE</div></div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
