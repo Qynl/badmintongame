@@ -34,6 +34,9 @@ const freshSession = () => ({
   trainingHits: 0, trainingAttempts: 0, trainingSuccess: 0, trainingStreak: 0, trainingBestStreak: 0,
   winner: null as 0 | 1 | null, impactPoint: null as [number, number] | null,
   feedback: '', lastLanding: null as 'Target' | 'In' | 'Out' | null, nextFeed: 0, courtFade: 0, rallies: 0, bestRally: 0, swingReady: false, reachReady: false, contactPulse: 0, smashReady: false, selectedShot: 'rally' as AssistedShot, timedContact: false, opponentShot: '' as string, replyPulse: 0, winners: 0, smashWinners: 0, touchWinners: 0,
+  /** Aim readout: where the marker sits, and how close the last shot landed to it (metres). */
+  aimLabel: 'DEEP CENTRE', aimArmed: false, aimVisible: false,
+  placement: null as number | null, placementAvg: 0, placementShots: 0, placementOnTarget: 0,
 });
 type SessionState = ReturnType<typeof freshSession>;
 interface GameStore extends SessionState {

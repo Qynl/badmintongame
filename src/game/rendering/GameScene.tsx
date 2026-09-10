@@ -9,6 +9,7 @@ import { Shuttlecock } from '../shuttle/Shuttlecock';
 import { Opponent } from '../ai/Opponent';
 import { ShuttleGuide } from './ShuttleGuide';
 import { PracticeAids } from './PracticeAids';
+import { AimMarker } from './AimMarker';
 import { GameEngine } from '../GameEngine';
 import { useGameStore } from '../../state/gameStore';
 function Scene({ engine }: { engine: GameEngine }) {
@@ -38,7 +39,7 @@ function Scene({ engine }: { engine: GameEngine }) {
     <Suspense fallback={null}><LightEnvironment resolution={64} frames={1}><mesh scale={20}><sphereGeometry args={[1, 16, 16]}/><meshBasicMaterial side={1} color={new Color('#a7b3a0')} toneMapped={false}/></mesh><mesh position={[0, 8, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[10, 15, 1]}><planeGeometry/><meshBasicMaterial color="#fff4dd" toneMapped={false}/></mesh></LightEnvironment></Suspense>
     <group ref={hall}><Environment/></group>
     <Court engine={engine}/><Opponent engine={engine} menu={menu}/>
-    {!menu && <><PlayerBody engine={engine}/><Shuttlecock engine={engine}/><ShuttleGuide engine={engine}/><PracticeAids engine={engine}/></>}
+    {!menu && <><PlayerBody engine={engine}/><Shuttlecock engine={engine}/><ShuttleGuide engine={engine}/><PracticeAids engine={engine}/><AimMarker engine={engine}/></>}
   </>;
 }
 export function GameScene() {

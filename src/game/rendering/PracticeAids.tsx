@@ -34,7 +34,26 @@ export function PracticeAids({ engine }: { engine: GameEngine }) {
     <primitive object={line}/>
     <group ref={marker} rotation={[-Math.PI / 2, 0, 0]}><mesh><ringGeometry args={[0.2, 0.22, 40]}/><meshBasicMaterial ref={markerMaterial} color="#efd0a1" transparent opacity={0.8}/></mesh><mesh><circleGeometry args={[0.025, 12]}/><meshBasicMaterial color="#efd0a1"/></mesh></group>
     {mode === 'training' && <TargetZone shot={shot}/>}
+    {mode === 'practice' && settings.guides && <PlacementZone engine={engine}/>}
   </>;
+}
+/** The lit landing zone for the Rally Run placement challenge; hidden when there is no challenge. */
+function PlacementZone({ engine }: { engine: GameEngine }) {
+  const group = useRef<Group>(null);
+  useFrame(() => {
+    const zone = engine.run.zone, target = group.current;
+    if (!target) return;
+    target.visible = !!zone;
+    if (zone) target.position.set(zone.x, 0.024, zone.z);
+    target.scale.set(zone?.halfWidth ?? 1, 1, zone?.halfDepth ?? 1);
+  });
+  return <group ref={group}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[2, 2]}/><meshBasicMaterial color="#9fd08a" transparent opacity={0.1} depthWrite={false}/></mesh>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]}><ringGeometry args={[0.16, 0.18, 30]}/><meshBasicMaterial color="#b6e0a0" transparent opacity={0.6} depthWrite={false}/></mesh>
+    {([-1, 1] as const).flatMap((sx) => ([-1, 1] as const).map((sz) =>
+      <mesh key={`${sx}${sz}`} rotation={[-Math.PI / 2, 0, 0]} position={[sx * 0.97, 0.001, sz * 0.97]}>
+        <planeGeometry args={[0.18, 0.03]}/><meshBasicMaterial color="#b6e0a0" transparent opacity={0.55} depthWrite={false}/></mesh>))}
+  </group>;
 }
 function TargetZone({ shot }: { shot: keyof typeof drills }) {
   const d = drills[shot], width = d.halfWidth * 2, depth = d.maxZ - d.minZ, z = (d.maxZ + d.minZ) * 0.5;

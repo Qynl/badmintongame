@@ -2,7 +2,7 @@ import { MathUtils, Quaternion, Vector3 } from 'three';
 import type { RacketController } from '../player/RacketController';
 import type { ShuttlecockPhysics } from '../shuttle/ShuttlecockPhysics';
 import type { ContactQuality, ShotType } from '../../state/gameStore';
-export interface Contact { quality: ContactQuality; shot: ShotType; speed: number; offset: number; point: [number, number]; incidence: number; timed?: boolean; feedback?: string }
+export interface Contact { quality: ContactQuality; shot: ShotType; speed: number; offset: number; point: [number, number]; incidence: number; timed?: boolean; feedback?: string; target?: Vector3 }
 const a = new Vector3(), b = new Vector3(), p = new Vector3(), inv = new Quaternion(), relative = new Vector3();
 export function racketContact(shuttle: ShuttlecockPhysics, racket: RacketController): Contact | null {
   if (!shuttle.active || shuttle.hitCooldown > 0) return null;

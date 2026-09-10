@@ -11,7 +11,7 @@ export class OpponentAI {
   position = new Vector3(-0.9, 0, -3.8); velocity = new Vector3(); target = this.position.clone();
   swing = 0; stride = 0; reaction = 0; lastFlight = -1; mayHit = true;
   racketTarget = new Vector3(); contactPoint = new Vector3(); leavingOut = false;
-  pressure = 0; returns = 0; shortMemory = 0;
+  pressure = 0; returns = 0; shortMemory = 0; sideMemory = 0;
   lunge = 0; stamina = 1; recovering = 0; lastShot: ShotType | 'Block' | null = null;
   private attacked = false;
   private readThisFlight = false;
@@ -35,6 +35,8 @@ export class OpponentAI {
       const prediction = predictFlight(shuttle.position, shuttle.velocity);
       if (!this.readThisFlight) {
         this.shortMemory = this.shortMemory * 0.65 + (Math.abs(prediction.landing.z) < 2.2 ? 0.35 : 0);
+        // Remember a repeated corner across points, so one-sided placement stops being free.
+        this.sideMemory = this.sideMemory * 0.62 + MathUtils.clamp(prediction.landing.x / 2.4, -1, 1) * 0.38;
         this.readThisFlight = true;
       }
       const judgedX = prediction.landing.x + this.error.x, judgedZ = prediction.landing.z + this.error.z;
@@ -52,7 +54,7 @@ export class OpponentAI {
       }
       this.predictionTimer = 0.10;
     }
-    if (!incoming || this.leavingOut) this.target.set(-player.x * 0.2, 0, -3.8 + this.shortMemory * 1.6);
+    if (!incoming || this.leavingOut) this.target.set(-player.x * 0.2 + this.sideMemory * 0.95, 0, -3.8 + this.shortMemory * 1.6);
     this.direction.subVectors(this.target, this.position);
     const distance = this.direction.length();
     this.direction.normalize().multiplyScalar(Math.min(this.lunge > 0 ? level.speed + 2.1 : this.recovering > 0 ? level.speed * 0.78 : level.speed, distance * 5));
@@ -60,7 +62,7 @@ export class OpponentAI {
     this.stride += this.velocity.length() * dt * 3.3; this.racketTarget.copy(shuttle.position);
     const reach = Math.hypot(shuttle.position.x - this.position.x, shuttle.position.z - this.position.z);
     if (incoming && this.mayHit && !this.leavingOut && this.reaction === 0 && shuttle.hitCooldown <= (this.attacked ? 0.23 : 0) && shuttle.position.z < -0.2 && shuttle.position.y > (this.attacked ? 0.25 : 0.65) && shuttle.position.y < (relaxed ? 2.55 : 3.05) && reach < (this.attacked ? this.lunge > 0 ? 1.65 : 1.4 : 1.1) && shuttle.velocity.y < 2) {
-      const decision = chooseShot(shuttle.position, player, difficulty, friendly, { pressure: this.pressure, sequence: this.returns, relaxed });
+      const decision = chooseShot(shuttle.position, player, difficulty, friendly, { pressure: this.pressure, sequence: this.returns, relaxed, sideBias: this.sideMemory });
       const plan = decision.target.y > 0 ? planIntercept(shuttle.position, decision.target, decision.loft) : planReturn(shuttle.position, decision.target, decision.loft, difficulty === 'casual' ? 0.35 : 0.12);
       let outgoing = plan.velocity;
       this.lastShot = classifyShot(outgoing, shuttle.position, plan.landing);

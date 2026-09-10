@@ -2,20 +2,22 @@ import type { ContactQuality, ShotType, TrainingShot } from '../../state/gameSto
 export interface Drill {
   minZ: number; maxZ: number; halfWidth: number; startZ: number;
   loft: number; feedLandingZ: number; instruction: string; targetLabel: string;
+  /** Where you start looking, so the assisted aim marker opens on this drill's zone. */
+  aimPitch: number;
 }
 export const drills: Record<TrainingShot, Drill> = {
-  Clear: { minZ: -6.7, maxZ: -4.6, halfWidth: 2.59, startZ: 4.4, loft: 12, feedLandingZ: 6.5, instruction: 'Get behind it. Open the face and send it deep.', targetLabel: 'BACK COURT' },
-  Drop: { minZ: -1.98, maxZ: -0.25, halfWidth: 2.59, startZ: 4.2, loft: 12, feedLandingZ: 6.3, instruction: 'Meet it high. Soften your hand through contact.', targetLabel: 'FRONT COURT' },
-  Smash: { minZ: -5.3, maxZ: -2.0, halfWidth: 2.59, startZ: 4.5, loft: 15, feedLandingZ: 6.7, instruction: 'Raise the racket, then accelerate down through the cork.', targetLabel: 'ATTACKING ZONE' },
-  'Net shot': { minZ: -1.5, maxZ: -0.15, halfWidth: 2.59, startZ: 1.9, loft: 7, feedLandingZ: 3.5, instruction: 'Stay close. A short reach and a quiet touch.', targetLabel: 'TIGHT TO THE NET' },
+  Clear: { minZ: -6.7, maxZ: -4.6, halfWidth: 2.59, startZ: 4.4, loft: 12, feedLandingZ: 6.5, aimPitch: -0.02, instruction: 'Get behind it. Open the face and send it deep.', targetLabel: 'BACK COURT' },
+  Drop: { minZ: -1.98, maxZ: -0.25, halfWidth: 2.59, startZ: 4.2, loft: 12, feedLandingZ: 6.3, aimPitch: -0.16, instruction: 'Meet it high. Soften your hand through contact.', targetLabel: 'FRONT COURT' },
+  Smash: { minZ: -5.3, maxZ: -2.0, halfWidth: 2.59, startZ: 4.5, loft: 15, feedLandingZ: 6.7, aimPitch: -0.11, instruction: 'Raise the racket, then accelerate down through the cork.', targetLabel: 'ATTACKING ZONE' },
+  'Net shot': { minZ: -1.5, maxZ: -0.15, halfWidth: 2.59, startZ: 1.9, loft: 7, feedLandingZ: 3.5, aimPitch: -0.2, instruction: 'Stay close. A short reach and a quiet touch.', targetLabel: 'TIGHT TO THE NET' },
 };
 export function drillInstruction(shot: TrainingShot, assisted = false) {
   if (!assisted) return drills[shot].instruction;
   return {
-    Clear: 'Left-click for a deep return. Aim into the back-court zone.',
-    Drop: 'Right-click with high contact. Bring it down into the front court.',
-    Smash: 'Press F on the high-ball cue. A fresh press adds attacking pace.',
-    'Net shot': 'Stay close and right-click. A quiet touch, just over the tape.',
+    Clear: 'Look into the back-court zone and left-click. The marker shows your landing.',
+    Drop: 'Look short, then right-click with high contact. The marker is your landing.',
+    Smash: 'Aim the marker inside the zone, then press F on the high-ball cue.',
+    'Net shot': 'Stay close, look just over the tape and right-click.',
   }[shot];
 }
 export function insideTarget(shot: TrainingShot, x: number, z: number) {

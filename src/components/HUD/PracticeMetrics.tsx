@@ -25,12 +25,15 @@ export function PracticeMetrics() {
   const racketSpeed = useGameStore((s) => s.racketSpeed), impact = useGameStore((s) => s.settings.impact);
   const contacts = useGameStore((s) => s.contacts), mode = useGameStore((s) => s.mode);
   const feedback = useGameStore((s) => s.feedback), landing = useGameStore((s) => s.lastLanding);
+  const placement = useGameStore((s) => s.placement), placementAvg = useGameStore((s) => s.placementAvg);
+  const placementShots = useGameStore((s) => s.placementShots), onTarget = useGameStore((s) => s.placementOnTarget);
   return <>{impact && <aside className="practice-metrics" aria-label="Contact lab">
     <div className="metrics-heading"><SlidersHorizontal size={13}/> CONTACT LAB <span>{assisted ? 'ASSISTED' : 'EXACT'}</span></div>
     <div className="impact-summary"><div className={`contact-result ${contact === 'Perfect' ? 'perfect' : ''}`}>{contact || 'Find the feel.'}<small>{shot || 'Make your first connection'}</small>{landing && <span className={`landing-chip ${landing === 'Target' ? 'on-target' : ''}`}>{landing === 'Target' ? <Target size={10}/> : <Crosshair size={10}/>} {landing === 'Target' ? 'ON TARGET' : landing === 'In' ? 'LANDED IN' : 'OUT / FAULT'}</span>}</div><StringBedImpact/></div>
     <div className="metric-row"><span>Racket speed</span><strong>{racketSpeed.toFixed(1)} <small>KM/H</small></strong></div>
     <div className="metric-row"><span>Shuttle off strings</span><strong>{speed.toFixed(0)} <small>KM/H</small></strong></div>
     <div className="metric-row"><span>Racket contacts</span><strong>{contacts}</strong></div>
+    {assisted && <div className="metric-row"><span>Placement <small>{placementShots ? `${onTarget}/${placementShots} ON MARK` : 'AIM · LOOK WHERE YOU WANT IT'}</small></span><strong>{placement === null ? '—' : `${placement.toFixed(2)} <small>M</small>`}<small>{placementAvg > 0 ? ` AVG ${placementAvg.toFixed(2)}` : ''}</small></strong></div>}
     <div className="contact-coach"><span>ONE SMALL ADJUSTMENT</span><p>{feedback || 'Move into position before you swing. The shuttle will come to you.'}</p></div>
   </aside>}{mode === 'training' && <TrainingGoal/>}{mode === 'practice' && <RunChallenge/>}</>;
 }
@@ -59,7 +62,7 @@ function RunChallenge() {
     <div className="drill-eyebrow"><Flame size={15}/> RALLY RUN <span>BEST {run.best}</span></div>
     <div className="run-score"><strong>{run.chain ? run.score : run.last}</strong><span>{run.chain ? `×${run.multiplier}` : 'READY'}<small>{run.chain ? 'MULTIPLIER' : run.last ? 'LAST RUN' : 'BUILD A CHAIN'}</small></span></div>
     <h3>{run.objective.title}</h3><p>{run.objective.detail}</p>
-    <div className="run-pips">{[0, 1, 2].map(i => <i key={i} className={i < run.goals % 3 ? 'complete' : i === run.goals % 3 ? 'current' : ''}/>)}</div>
+    <div className="run-pips">{[0, 1, 2, 3].map(i => <i key={i} className={i < run.goals % 4 ? 'complete' : i === run.goals % 4 ? 'current' : ''}/>)}</div>
     <div className="drill-streak">{run.reward}</div><small className="run-rule">Legal returns count. Mix shots for more points.<br/>Win the rally for +100. Beat your best run.</small>
   </aside>;
 }
