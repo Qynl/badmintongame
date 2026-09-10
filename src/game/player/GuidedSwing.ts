@@ -7,6 +7,7 @@ import { planAssistedShot } from './ShotPlanner';
 import type { AssistedShot } from './ShotPlanner';
 import { COURT, aimFrom, aimLabel, clampAim, depthBand } from './AimSystem';
 import { STRIKE_EARLY, STRIKE_LATE } from './StrikeWindow';
+import { inView, VIEW_ASPECT } from './ViewGate';
 import type { AimBox } from './AimSystem';
 import { planReturn } from '../ai/Prediction';
 
@@ -27,6 +28,11 @@ export class GuidedSwing {
    * the back court and cannot attack, so spamming gives the opponent something to hit.
    */
   power = 1; flail = 0; timing: 'Perfect' | 'Good' | 'Early' | 'Late' = 'Good';
+  /**
+   * The shuttle has to be on screen. `seen` is false when it is outside the camera frustum,
+   * and nothing connects while it is false, so holding the button and looking away does nothing.
+   */
+  seen = true; aspect = VIEW_ASPECT;
   /** Set by the engine while the player is serving, so the aim stays inside the diagonal service box. */
   service: AimBox | null = null;
   private requestAge = Infinity; private followRotation = new Quaternion();
@@ -88,7 +94,10 @@ export class GuidedSwing {
 
   /** Move the visible hand/racket into the stroke; then check their actual swept proximity. */
   track(dt: number, racket: RacketController, player: PlayerController, shuttle: ShuttlecockPhysics) {
-    this.reachable = this.canReach(player, shuttle);
+    // Eyes on the shuttle, or the racket stays down. The serve is exempt: you aim it by looking
+    // at the far service box, not by staring at the shuttle in your own hand.
+    this.seen = !shuttle.active || !shuttle.served || inView(player, shuttle.position, this.aspect);
+    this.reachable = this.seen && this.canReach(player, shuttle);
     const opportunity = shuttle.position.clone().sub(player.position);
     const ahead = opportunity.x * -Math.sin(player.yaw) + opportunity.z * -Math.cos(player.yaw);
     this.nearby = shuttle.active && ahead > -0.2 && Math.hypot(opportunity.x, opportunity.z) < 3.4;
@@ -130,6 +139,7 @@ export class GuidedSwing {
   }
 
   contact(shuttle: ShuttlecockPhysics, racket: RacketController, player: PlayerController): Contact | null {
+    // `reachable` already carries the view gate: no contact with a shuttle you cannot see.
     if (!this.armed || !this.reachable || shuttle.hitCooldown > 0 || !this.canReach(player, shuttle)) return null;
     // Relative swept sphere about the guided string bed; 30 cm tolerance buys timing forgiveness.
     const a = shuttle.previous.clone().sub(racket.previous), b = shuttle.position.clone().sub(racket.center);

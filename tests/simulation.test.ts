@@ -31,8 +31,8 @@ describe('shuttle aerodynamics', () => {
 function collision(offsetX = 0) { const s = new ShuttlecockPhysics(); s.active = true; s.served = true; s.previous.set(offsetX, 0, -0.12); s.position.set(offsetX, 0, 0.12); s.velocity.set(0, 0, 25); const r = new RacketController(); r.center.set(0, 0, 0); r.previous.copy(r.center); r.velocity.set(0, 0, -8); return { s, r }; }
 describe('swept string-bed contact', () => {
   it('catches fast crossings between physics frames', () => { const { s, r } = collision(); const hit = racketContact(s, r); expect(hit?.quality).toBe('Perfect'); expect(s.velocity.z).toBeLessThan(0); expect(s.hitCooldown).toBeGreaterThan(0); });
-  it('allows a real miss outside the racket ellipse', () => { const { s, r } = collision(0.3); expect(racketContact(s, r)).toBeNull(); });
-  it('reduces off-center power', () => { const clean = collision(), edge = collision(0.15); const a = racketContact(clean.s, clean.r)!, b = racketContact(edge.s, edge.r)!; expect(b.quality).toBe('Off-center'); expect(b.speed).toBeLessThan(a.speed); });
+  it('allows a real miss outside the racket ellipse', () => { const { s, r } = collision(0.36); expect(racketContact(s, r)).toBeNull(); });
+  it('reduces off-center power', () => { const clean = collision(), edge = collision(0.17); const a = racketContact(clean.s, clean.r)!, b = racketContact(edge.s, edge.r)!; expect(b.quality).toBe('Off-center'); expect(b.speed).toBeLessThan(a.speed); });
   it('prevents duplicate contact from the same intersection', () => { const { s, r } = collision(); racketContact(s, r); expect(racketContact(s, r)).toBeNull(); });
   it('distinguishes a smash from a lift using actual velocity', () => { expect(classifyShot(new Vector3(0, -20, -40), new Vector3(0, 2.8, 3))).toBe('Smash'); expect(classifyShot(new Vector3(0, 15, -8), new Vector3(0, 1, 3))).toBe('Lift'); });
   it('collides with the net continuously rather than tunneling', () => { const s = new ShuttlecockPhysics(); s.previous.set(0, 1.2, 0.5); s.position.set(0, 1.2, -0.5); s.velocity.set(0, 1, -50); expect(netCrossing(s)).toBe('net'); expect(s.velocity.z).toBeGreaterThan(0); s.previous.set(0, 2, 0.5); s.position.set(0, 2, -0.5); expect(netCrossing(s)).toBe('over'); });
@@ -46,14 +46,27 @@ describe('athletic movement', () => {
 
 describe('Simulation stays exact but stops being cruel', () => {
   it('plays a shuttle caught on the frame instead of dropping the rally', () => {
-    const frame = collision(0.22), clean = collision();
+    const frame = collision(0.24), clean = collision();
     const hit = racketContact(frame.s, frame.r);
     expect(hit?.quality).toBe('Off-center');
     expect(frame.s.velocity.z).toBeLessThan(0);
-    expect(hit!.speed).toBeLessThan(racketContact(clean.s, clean.r)!.speed * 0.75);
+    expect(hit!.speed).toBeLessThan(racketContact(clean.s, clean.r)!.speed * 0.8);
+    // A catch deep in the frame is worse than a clean block, but it is still a return.
+    const deep = collision(0.29), blocked = racketContact(deep.s, deep.r);
+    expect(blocked?.quality).toBe('Off-center');
+    expect(blocked!.speed).toBeLessThan(hit!.speed);
+    expect(deep.s.velocity.z).toBeLessThan(0);
+  });
+  it('catches anything inside the frame band and nothing outside it', () => {
+    // The hittable half-width is (radiusX + 0.065) * 1.45 = 0.3045 m, against 0.2574 m before:
+    // the catch ellipse is 40% larger in area, so near misses keep the rally alive.
+    const inside = collision(0.30), outside = collision(0.32);
+    expect(racketContact(inside.s, inside.r)?.quality).toBe('Off-center');
+    expect(racketContact(outside.s, outside.r)).toBeNull();
+    expect((0.21 * 1.45) / (0.195 * 1.32)).toBeGreaterThan(1.15);
   });
   it('still lets a shuttle past when the racket is nowhere near it', () => {
-    expect(racketContact(...Object.values(collision(0.34)) as [ShuttlecockPhysics, RacketController])).toBeNull();
+    expect(racketContact(...Object.values(collision(0.42)) as [ShuttlecockPhysics, RacketController])).toBeNull();
   });
   it('releases the service toss low, slow and clear of the strings', async () => {
     const { GameEngine } = await import('../src/game/GameEngine');

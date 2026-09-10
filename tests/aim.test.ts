@@ -7,6 +7,7 @@ import { ShuttlecockPhysics } from '../src/game/shuttle/ShuttlecockPhysics';
 import { aimFrom, aimLabel, clampAim, depthBand, serviceBox, COURT } from '../src/game/player/AimSystem';
 import { planAssistedShot } from '../src/game/player/ShotPlanner';
 import { sampleFlight } from '../src/game/ai/Prediction';
+import { lookAt } from './support';
 import { OpponentAI } from '../src/game/ai/OpponentAI';
 import { chooseShot } from '../src/game/ai/DecisionMaking';
 import { RallyRun } from '../src/game/training/RallyRun';
@@ -88,6 +89,7 @@ describe('the swing commits the placement you asked for', () => {
       const player = playerAt(4.4, 0, -0.05);
       const shuttle = new ShuttlecockPhysics();
       shuttle.reset(new Vector3(0, 2.6, 3.5), new Vector3(0, -2, 5)); shuttle.lastHit = 1; shuttle.served = true;
+      lookAt(player, shuttle.position); // contact needs the shuttle inside the view cone
       const racket = new RacketController();
       racket.center.copy(shuttle.position).x += offsetX; racket.previous.copy(racket.center);
       const guide = new GuidedSwing();

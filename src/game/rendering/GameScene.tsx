@@ -27,7 +27,7 @@ function Scene({ engine }: { engine: GameEngine }) {
       const t = elapsed.current;
       camera.position.set(10.0 + Math.sin(t * 0.055) * 0.20, 7.2, 14.0 + Math.sin(t * 0.04) * 0.15);
       camera.lookAt(-2.7, 0.10, -0.7);
-    } else { if (camera instanceof PerspectiveCamera && camera.fov !== 72) { camera.fov = 72; camera.updateProjectionMatrix(); } camera.position.copy(engine.player.head); camera.quaternion.copy(engine.player.rotation); }
+    } else { if (camera instanceof PerspectiveCamera && camera.fov !== 72) { camera.fov = 72; camera.updateProjectionMatrix(); } camera.position.copy(engine.player.head); camera.quaternion.copy(engine.player.rotation); if (camera instanceof PerspectiveCamera && camera.aspect > 0) engine.aspect = camera.aspect; }
   });
   return <>
     <color attach="background" args={['#323a30']}/><fog attach="fog" args={['#303b32', 22, 54]}/>

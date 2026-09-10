@@ -20,6 +20,8 @@ import { audio } from './audio/AudioManager';
 export class GameEngine {
   run = new RallyRun();
   guide = new GuidedSwing();
+  /** Viewport aspect, kept current by the renderer so the view gate matches the real frustum. */
+  aspect = 16 / 9;
   player = new PlayerController(); racket = new RacketController(); shuttle = new ShuttlecockPhysics();
   opponent = new OpponentAI(); match = new MatchManager(); transition = new RallyTransition(); input: InputManager | null = null;
   time = 0; netMotion = 0; cooldown = 1.5; landing = new Vector3(); showLanding = false; ends = false;
@@ -148,6 +150,7 @@ export class GameEngine {
     this.match.rallyTime += dt; this.shuttle.step(dt);
     const previousHitter = this.shuttle.lastHit;
     const assisted = state.settings.controls === 'assisted';
+    this.guide.aspect = this.aspect;
     if (assisted) this.guide.track(dt, this.racket, this.player, this.shuttle);
     const contact = assisted ? this.guide.contact(this.shuttle, this.racket, this.player) : racketContact(this.shuttle, this.racket);
     if (contact) {
@@ -194,7 +197,7 @@ export class GameEngine {
       }
       this.aimVisible = state.settings.controls === 'assisted' && !this.transition.active &&
         (this.shuttle.active ? this.shuttle.lastHit === 1 || !this.shuttle.served : state.mode !== 'match' || this.match.score.server === 0);
-      useGameStore.setState({ replyPulse: this.replyPulse, bestRally: Math.max(state.bestRally, this.match.hits), smashReady: this.guide.smashReady && this.shuttle.active, selectedShot: this.guide.intent, reachReady: this.guide.reachable && this.shuttle.active, swingReady: this.guide.armed, contactPulse: this.contactPulse, racketSpeed: this.racket.velocity.length() * 3.6, courtFade: this.transition.opacity,
+      useGameStore.setState({ replyPulse: this.replyPulse, bestRally: Math.max(state.bestRally, this.match.hits), smashReady: this.guide.smashReady && this.shuttle.active, selectedShot: this.guide.intent, reachReady: this.guide.reachable && this.shuttle.active, shuttleSeen: this.guide.seen, swingReady: this.guide.armed, contactPulse: this.contactPulse, racketSpeed: this.racket.velocity.length() * 3.6, courtFade: this.transition.opacity,
         aimLabel: this.guide.label, aimArmed: this.guide.armed, aimVisible: this.aimVisible,
         nextFeed: !this.shuttle.active && state.mode !== 'match' ? Math.max(0, this.cooldown) : 0 });
       audio.volume(state.settings.volume); audio.listener(this.player.head, this.forward.set(0, 0, -1).applyQuaternion(this.player.rotation));

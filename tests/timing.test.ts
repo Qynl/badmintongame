@@ -9,6 +9,7 @@ import { STRIKE_EARLY, STRIKE_LATE, inStrikeWindow, timeToStrike } from '../src/
 import { sampleFlight } from '../src/game/ai/Prediction';
 import { useGameStore } from '../src/state/gameStore';
 import type { InputManager } from '../src/game/input/InputManager';
+import { lookAt, watch } from './support';
 
 beforeEach(() => useGameStore.getState().setSettings({ controls: 'assisted', difficulty: 'casual' }));
 
@@ -21,6 +22,7 @@ function swing(age = 0.18, presses = 1, intent?: 'smash', hold = false) {
   const player = new PlayerController(); player.position.set(0, 0, 4.4);
   const shuttle = new ShuttlecockPhysics();
   shuttle.reset(new Vector3(0, 2.6, 3.5), new Vector3(0, -2, 5)); shuttle.lastHit = 1; shuttle.served = true;
+  lookAt(player, shuttle.position); // Assisted contact is gated on the shuttle being in view
   const racket = new RacketController(); racket.center.copy(shuttle.position); racket.previous.copy(shuttle.previous);
   const guide = new GuidedSwing();
   guide.track(1 / 120, racket, player, shuttle);
@@ -83,6 +85,7 @@ describe('the timing window is shown, not hidden', () => {
     e.frame(1 / 120); e.cooldown = 0;
     let hits = 0, error = 0, pressed = false, predicted = 0;
     for (let i = 0; i < 120 * 60; i++) {
+      watch(e);
       const before = useGameStore.getState().contacts;
       if (!pressed && e.guide.cooldown === 0) {
         const seconds = timeToStrike(e.player, e.shuttle);

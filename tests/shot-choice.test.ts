@@ -6,6 +6,8 @@ import { chooseShot } from '../src/game/ai/DecisionMaking';
 import { useGameStore } from '../src/state/gameStore';
 import { GameEngine } from '../src/game/GameEngine';
 import type { InputManager } from '../src/game/input/InputManager';
+import { watch } from './support';
+import { drills } from '../src/game/training/Drills';
 import { OpponentAI } from '../src/game/ai/OpponentAI';
 import { ShuttlecockPhysics } from '../src/game/shuttle/ShuttlecockPhysics';
 import { GuidedSwing } from '../src/game/player/GuidedSwing';
@@ -105,9 +107,10 @@ for (const goal of ['Clear', 'Drop', 'Smash', 'Net shot'] as const) it(`makes th
   for (let i = 0; i < 800; i++) {
     const window = goal === 'Smash' ? e.guide.smashReady : e.guide.canReach(e.player, e.shuttle);
     if (window && !pressed && e.guide.cooldown === 0) {
-      pressed = true;
+      // Play it as instructed: look at the zone, commit the shot, then track the shuttle in.
+      pressed = true; e.player.pitch = drills[goal].aimPitch;
       if (goal === 'Smash') e.input!.pendingShot = 'smash'; else if (goal === 'Clear') e.input!.swingPressed = true; else e.input!.pendingShot = 'drop';
-    }
+    } else if (pressed) watch(e);
     e.frame(1 / 120); if (useGameStore.getState().contacts) break;
   }
   expect(pressed).toBe(true);
@@ -123,6 +126,7 @@ it('turns a real high reply into a smash winner and resets its statistics for a 
     e.frame(1 / 120); e.cooldown = 0; e.input.serve = true;
     let attacked = false;
     for (let i = 0; i < 2000; i++) {
+      watch(e);
       // One swing at the window, not a mash: mashing now costs the power an attack needs.
       if (!attacked && e.guide.smashReady && useGameStore.getState().contacts === 1) { attacked = true; e.input!.pendingShot = 'smash'; random.mockReturnValue(0); }
       e.frame(1 / 120);

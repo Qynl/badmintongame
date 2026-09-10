@@ -8,6 +8,7 @@ import { ShuttlecockPhysics } from '../src/game/shuttle/ShuttlecockPhysics';
 import { useGameStore, validateSettings } from '../src/state/gameStore';
 import type { InputManager } from '../src/game/input/InputManager';
 import { sampleFlight } from '../src/game/ai/Prediction';
+import { lookAt, watch } from './support';
 
 function setup(mode: 'match' | 'practice' = 'practice') {
   useGameStore.getState().start(mode);
@@ -33,6 +34,7 @@ describe('accessible contact regressions', () => {
   for (const reaction of [0, 12, 24]) it(`returns a real feed with one click after ${reaction / 120}s reaction time, no aiming or mouse motion`, () => {
     const e = setup(); let inRange = 0, clicked = false;
     for (let i = 0; i < 900; i++) {
+      watch(e); // a beginner still tracks the shuttle with their eyes
       if (e.guide.canReach(e.player, e.shuttle)) { if (inRange++ >= reaction && !clicked) { click(e); clicked = true; } }
       e.frame(1 / 120); if (useGameStore.getState().contacts) break;
     }
@@ -65,7 +67,7 @@ describe('accessible contact regressions', () => {
   for (const [name, position, dy] of [
     ['Clear', [0, 2.8, 3.5], -40], ['Drop', [0, 2.8, 3.5], 20], ['Smash', [0, 2.8, 1.4], 80], ['Net shot', [0, 1.5, 1.2], 20],
   ] as const) it(`allows a ${name} through mouse intent without a shot button`, () => {
-    const player = new PlayerController(); player.position.set(0, 0, position[2] + 0.9);
+    const player = new PlayerController(); player.position.set(0, 0, position[2] + 0.9); lookAt(player, new Vector3(...position));
     const shuttle = new ShuttlecockPhysics(); shuttle.reset(new Vector3(...position), new Vector3(0, -2, 5)); shuttle.lastHit = 1; shuttle.served = true;
     const racket = new RacketController(); racket.center.copy(shuttle.position); racket.previous.copy(shuttle.previous);
     // Read the shuttle, commit the swing, let the stroke travel, then meet it.
