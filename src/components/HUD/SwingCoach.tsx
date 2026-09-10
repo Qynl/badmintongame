@@ -8,6 +8,7 @@ export function SwingCoach() {
   const active = useGameStore((s) => s.rallyActive), smashReady = useGameStore((s) => s.smashReady);
   const selected = useGameStore((s) => s.selectedShot), feedback = useGameStore((s) => s.feedback);
   const aimLabel = useGameStore((s) => s.aimLabel), placement = useGameStore((s) => s.placement);
+  const power = useGameStore((s) => s.swingPower), flail = useGameStore((s) => s.flail);
   if (!assisted || !guides) return null;
   const smashing = pulse > 0 && shot === 'Smash', dropping = pulse > 0 && (shot === 'Drop' || shot === 'Net shot');
   return <>
@@ -25,6 +26,7 @@ export function SwingCoach() {
       <div className={`shot-command ${selected === 'drop' && armed ? 'selected touch' : ''}`}><kbd>RMB</kbd><span>DROP</span><Wind size={13}/></div>
       <div className={`shot-command smash-command ${smashReady ? 'available' : ''} ${selected === 'smash' && armed ? 'selected' : ''}`}><kbd>F</kbd><span>SMASH<small>{smashReady ? 'WINDOW OPEN' : 'HIGH CONTACT'}</small></span><Zap size={13}/></div>
       <div className={`shot-command aim-command ${armed ? 'locked' : ''}`}><Crosshair size={13}/><span>AIM<small>{aimLabel}</small></span></div>
+      <div className={`shot-command power-command ${flail > 0.5 ? 'mashing' : ''}`} title="Swing power: full inside the strike ring, lower when you hold or mash"><span>POWER<small>{Math.round(power * 100)}%</small></span><span className="power-bar"><i style={{ width: `${Math.round(power * 100)}%` }}/></span></div>
     </div>
   </>;
 }

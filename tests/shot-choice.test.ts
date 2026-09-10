@@ -93,15 +93,24 @@ describe('rallies create different decisions', () => {
 it('buffers a different shot during follow-through rather than discarding the input', () => {
   const guide = new GuidedSwing(); guide.cooldown = 0.25;
   guide.input(1 / 120, true, false, 0, 0, 'drop'); expect(guide.armed).toBe(false);
-  for (let i = 0; i < 35; i++) guide.input(1 / 120, false, false, 0, 0);
+  for (let i = 0; i < 45; i++) guide.input(1 / 120, false, false, 0, 0);
   expect(guide.armed).toBe(true); expect(guide.intent).toBe('drop');
 });
 for (const goal of ['Clear', 'Drop', 'Smash', 'Net shot'] as const) it(`makes the ${goal} training feed reachable using its assisted control`, () => {
   useGameStore.setState({ trainingShot: goal }); useGameStore.getState().start('training');
   const e = new GameEngine(); e.input = { keys: new Set(), locked: true, swinging: false, dropHeld: false, serve: false, dx: 0, dy: 0, jump: false } as InputManager;
   e.frame(1 / 120); e.cooldown = 0;
-  if (goal === 'Smash') e.input.keys.add('KeyF'); else if (goal === 'Clear') e.input.swinging = true; else e.input.dropHeld = true;
-  for (let i = 0; i < 800; i++) { e.frame(1 / 120); if (useGameStore.getState().contacts) break; }
+  // Play the drill the way the instructions describe it: press the control when the cue opens.
+  let pressed = false;
+  for (let i = 0; i < 800; i++) {
+    const window = goal === 'Smash' ? e.guide.smashReady : e.guide.canReach(e.player, e.shuttle);
+    if (window && !pressed && e.guide.cooldown === 0) {
+      pressed = true;
+      if (goal === 'Smash') e.input!.pendingShot = 'smash'; else if (goal === 'Clear') e.input!.swingPressed = true; else e.input!.pendingShot = 'drop';
+    }
+    e.frame(1 / 120); if (useGameStore.getState().contacts) break;
+  }
+  expect(pressed).toBe(true);
   expect(useGameStore.getState().shot).toBe(goal);
   for (let i = 0; i < 600 && !useGameStore.getState().trainingAttempts; i++) e.frame(1 / 120);
   expect(useGameStore.getState().trainingSuccess).toBe(1);
@@ -112,8 +121,10 @@ it('turns a real high reply into a smash winner and resets its statistics for a 
     useGameStore.getState().start('match');
     const e = new GameEngine(); e.input = { keys: new Set(), locked: true, swinging: false, serve: false, dx: 0, dy: 0, jump: false } as InputManager;
     e.frame(1 / 120); e.cooldown = 0; e.input.serve = true;
+    let attacked = false;
     for (let i = 0; i < 2000; i++) {
-      if (e.guide.smashReady && useGameStore.getState().contacts === 1) { e.input.keys.add('KeyF'); random.mockReturnValue(0); }
+      // One swing at the window, not a mash: mashing now costs the power an attack needs.
+      if (!attacked && e.guide.smashReady && useGameStore.getState().contacts === 1) { attacked = true; e.input!.pendingShot = 'smash'; random.mockReturnValue(0); }
       e.frame(1 / 120);
       if (useGameStore.getState().contacts === 2) random.mockReturnValue(0);
       if (useGameStore.getState().rallies) break;

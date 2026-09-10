@@ -68,8 +68,13 @@ describe('accessible contact regressions', () => {
     const player = new PlayerController(); player.position.set(0, 0, position[2] + 0.9);
     const shuttle = new ShuttlecockPhysics(); shuttle.reset(new Vector3(...position), new Vector3(0, -2, 5)); shuttle.lastHit = 1; shuttle.served = true;
     const racket = new RacketController(); racket.center.copy(shuttle.position); racket.previous.copy(shuttle.previous);
-    const guide = new GuidedSwing(); guide.input(1 / 120, true, false, 0, dy); guide.track(1 / 120, racket, player, shuttle);
+    // Read the shuttle, commit the swing, let the stroke travel, then meet it.
+    const guide = new GuidedSwing(); guide.track(1 / 120, racket, player, shuttle);
+    guide.input(1 / 120, true, false, 0, dy);
+    for (let i = 0; i < 12; i++) guide.input(1 / 120, false, false, 0, 0);
+    guide.track(1 / 120, racket, player, shuttle);
     const contact = guide.contact(shuttle, racket, player); expect(contact?.shot).toBe(name);
+    expect(contact?.quality).toBe('Perfect');
     const flight = sampleFlight(shuttle.position, shuttle.velocity); expect(flight.netY).toBeGreaterThan(1.55);
   });
   it('does not hit without player swing input', () => {

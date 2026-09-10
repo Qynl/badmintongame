@@ -91,7 +91,9 @@ describe('the swing commits the placement you asked for', () => {
       const racket = new RacketController();
       racket.center.copy(shuttle.position).x += offsetX; racket.previous.copy(racket.center);
       const guide = new GuidedSwing();
+      guide.track(1 / 120, racket, player, shuttle);
       guide.input(1 / 120, true, false, 0, 0); guide.updateAim(player);
+      for (let i = 0; i < 12; i++) guide.input(1 / 120, false, false, 0, 0);
       guide.track(1 / 120, racket, player, shuttle);
       const contact = guide.contact(shuttle, racket, player);
       return { contact, drift: contact ? contact.target!.clone().sub(guide.locked).length() : NaN, control: guide.control };

@@ -65,8 +65,10 @@ export class GameEngine {
     if (state.mode === 'match' && this.match.score.server === 0) {
       const p = state.settings.controls === 'assisted'
         ? new Vector3(0.18, 1.02, -0.85).applyAxisAngle(new Vector3(0, 1, 0), this.player.yaw).add(this.player.position)
-        : new Vector3(0.4, -0.65, -1.12).applyQuaternion(this.player.rotation).add(this.player.head);
-      const v = state.settings.controls === 'assisted' ? new Vector3(0, 0.5, 0) : new Vector3(0, 1.0, 0.85).applyQuaternion(this.player.rotation);
+        : new Vector3(0.34, -0.62, -1.28).applyQuaternion(this.player.rotation).add(this.player.head);
+      // A low, slow toss in front of the strings: it hangs inside the legal strike zone
+      // instead of dropping straight through it, and never starts on the racket.
+      const v = state.settings.controls === 'assisted' ? new Vector3(0, 0.5, 0) : new Vector3(0, 0.45, 0.5).applyQuaternion(this.player.rotation);
       this.shuttle.reset(p, v); this.shuttle.lastHit = 0;
       useGameStore.setState({ message: state.settings.controls === 'assisted' ? 'Serving' : 'Hold click + move your mouse to serve' });
     } else {
@@ -138,7 +140,7 @@ export class GameEngine {
     }
     input.serve = false; this.netMotion *= Math.exp(-3 * dt);
     if (this.shuttle.active) this.updateFlight(dt, serving);
-    else if (!this.transition.active) this.opponent.step(dt, this.shuttle, this.player.position, state.settings.difficulty, this.match.hits, state.settings.controls === 'assisted' || state.mode === 'practice', state.mode === 'practice');
+    else if (!this.transition.active) this.opponent.step(dt, this.shuttle, this.player.position, state.settings.difficulty, this.match.hits, state.settings.controls === 'assisted' || state.mode === 'practice', state.mode === 'practice', state.settings.opponent);
     this.publish(dt);
   }
   private updateFlight(dt: number, serving: boolean) {
@@ -163,6 +165,7 @@ export class GameEngine {
         trainingHits: s.trainingHits + Number(s.mode === 'training' && contact.shot === s.trainingShot),
         impactPoint: contact.point, timedContact: contact.timed ?? false, feedback: contact.feedback ?? contactAdvice(contact.quality, contact.shot), rally: this.match.hits, message: '',
         placement: error, placementAvg: this.placementShots ? this.placementTotal / this.placementShots : 0,
+        swingPower: this.guide.power, flail: this.guide.flail,
         placementShots: this.placementShots, placementOnTarget: this.placementOnTarget, aimLabel: this.guide.label,
       }));
       if (doubleHit) { this.end(1, 'Double contact'); return; }
@@ -172,7 +175,7 @@ export class GameEngine {
     if (crossing === 'under') { this.end(this.shuttle.lastHit === 0 ? 1 : 0, 'Under the net'); return; }
     if (crossing === 'net' || crossing === 'tape') { this.netMotion = crossing === 'tape' ? 0.65 : 1; audio.sound('net', 1, this.shuttle.position); }
     if (crossing === 'over' || crossing === 'tape') this.shuttle.crossedNet = true;
-    if (state.mode !== 'training' && this.opponent.step(dt, this.shuttle, this.player.position, state.settings.difficulty, this.match.hits, state.settings.controls === 'assisted' || state.mode === 'practice', state.mode === 'practice')) {
+    if (state.mode !== 'training' && this.opponent.step(dt, this.shuttle, this.player.position, state.settings.difficulty, this.match.hits, state.settings.controls === 'assisted' || state.mode === 'practice', state.mode === 'practice', state.settings.opponent)) {
       if (state.mode === 'practice') { this.run.bank(); useGameStore.setState({ run: this.run.snapshot() }); }
       this.match.hits++; this.replyPulse = 1.5; audio.sound(this.opponent.lastShot === 'Smash' ? 'smash' : 'hit', this.shuttle.velocity.length(), this.shuttle.position); useGameStore.setState({ rally: this.match.hits, opponentShot: this.opponent.lastShot ?? 'Return' });
     }

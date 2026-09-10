@@ -26,7 +26,7 @@ function placement(landing: Vector3, target: Vector3) {
  * The intent selects a trajectory family; the aim selects where it lands.
  * Every candidate is tested against the net and the floor before contact.
  */
-export function planAssistedShot(from: Vector3, aim: AimInput, intent: AssistedShot, timed = false): PlannedShot {
+export function planAssistedShot(from: Vector3, aim: AimInput, intent: AssistedShot, timed = false, power = 1): PlannedShot {
   const target = resolveTarget(from, aim, intent);
   if (intent === 'smash' && from.y >= 2.05) {
     let best: { velocity: Vector3; score: number } | null = null;
@@ -38,7 +38,8 @@ export function planAssistedShot(from: Vector3, aim: AimInput, intent: AssistedS
         const velocity = solveLaunch(from, candidate, verticalSpeed), flight = sampleFlight(from, velocity);
         const speed = velocity.length();
         if (flight.netY === null || flight.netY < 1.61 || flight.landing.distanceTo(candidate) > 0.3 || speed < 23 || speed > 85) continue;
-        const preferredSpeed = timed ? 70 : 43;
+        // Racket-head speed follows the swing: a fresh, timed strike carries the attack.
+        const preferredSpeed = (26 + 44 * MathUtils.clamp(power, 0.42, 1)) * (timed ? 1 : 0.62);
         const score = Math.abs(speed - preferredSpeed) + Math.abs(depth - target.z) * 2 + Math.abs(candidate.x - target.x) * 2;
         if (!best || score < best.score) best = { velocity, score };
       }

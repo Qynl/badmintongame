@@ -5,7 +5,7 @@ export const levels = {
   club: { reaction: 0.24, speed: 4.0, error: 0.32, miss: 0.065 },
   expert: { reaction: 0.13, speed: 5.2, error: 0.16, miss: 0.025 },
 };
-export interface RallyContext { pressure: number; sequence: number; relaxed: boolean; sideBias?: number }
+export interface RallyContext { pressure: number; sequence: number; relaxed: boolean; sideBias?: number; attack?: number }
 export function chooseShot(from: Vector3, player: Vector3, difficulty: Difficulty, friendly = false, context: RallyContext = { pressure: 0, sequence: 0, relaxed: true }) {
   const level = levels[difficulty], choice = Math.random();
   // A player who keeps using one corner gets the other one hit back at them.
@@ -27,7 +27,9 @@ export function chooseShot(from: Vector3, player: Vector3, difficulty: Difficult
   }
   const attackSpace = Math.abs(bias) > 0.35 ? -Math.sign(bias) : player.x > 0 ? -1 : 1;
   const x = attackSpace * (difficulty === 'casual' ? 0.8 : 1.8) + (Math.random() - 0.5) * level.error;
-  const drop = choice < 0.28 && from.y > 1.8;
-  const smash = choice > 0.78 && from.y > 2.1 && context.pressure < 0.45;
+  // Personality decides how often a chance becomes an attack, and how often a drop instead.
+  const attack = MathUtils.clamp(context.attack ?? 1, 0.2, 3);
+  const drop = choice < MathUtils.clamp(0.28 + (1 - attack) * 0.16, 0.1, 0.55) && from.y > 1.8;
+  const smash = choice > MathUtils.clamp(1 - 0.22 * attack, 0.45, 0.95) && from.y > 2.1 && context.pressure < 0.45;
   return { target: new Vector3(x, 0, drop ? 1.7 : smash ? 3.6 : 5.7), loft: context.pressure > 0.6 ? 13 : drop ? 3.7 : smash ? 1.0 : 10.5 };
 }

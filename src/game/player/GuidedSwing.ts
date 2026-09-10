@@ -5,7 +5,8 @@ import type { ShuttlecockPhysics } from '../shuttle/ShuttlecockPhysics';
 import type { Contact } from '../physics/CollisionSystem';
 import { planAssistedShot } from './ShotPlanner';
 import type { AssistedShot } from './ShotPlanner';
-import { COURT, aimFrom, aimLabel, clampAim } from './AimSystem';
+import { COURT, aimFrom, aimLabel, clampAim, depthBand } from './AimSystem';
+import { STRIKE_EARLY, STRIKE_LATE } from './StrikeWindow';
 import type { AimBox } from './AimSystem';
 import { planReturn } from '../ai/Prediction';
 
@@ -20,9 +21,16 @@ export class GuidedSwing {
   animation = 0; intent: AssistedShot = 'rally'; smashReady = false;
   /** Where the shuttle will go: the aim marker, its label, and the point contact actually uses. */
   aim = new Vector3(0, 0, -5.5); locked = new Vector3(0, 0, -5.5); label = 'DEEP CENTRE'; control = 1;
+  /**
+   * Swing timing is the skill. `power` is 1 for a real swing inside the window and falls away
+   * for a stale held button, a rushed click, or mashing (`flail`). Weak swings cannot reach
+   * the back court and cannot attack, so spamming gives the opponent something to hit.
+   */
+  power = 1; flail = 0; timing: 'Perfect' | 'Good' | 'Early' | 'Late' = 'Good';
   /** Set by the engine while the player is serving, so the aim stays inside the diagonal service box. */
   service: AimBox | null = null;
   private requestAge = Infinity; private followRotation = new Quaternion();
+  private whiff = 0; private nearby = false;
   private afterHit = 0;
   private held = false;
   private lockNext = true;
@@ -37,12 +45,20 @@ export class GuidedSwing {
     this.requestAge += dt;
     this.buffered = Math.max(0, this.buffered - dt); this.cooldown = Math.max(0, this.cooldown - dt);
     this.afterHit = Math.max(0, this.afterHit - dt); this.held = held;
+    this.whiff = Math.max(0, this.whiff - dt);
+    this.flail = Math.max(0, this.flail - dt * 0.22);
     this.motion.multiplyScalar(Math.exp(-5 * dt));
-    if (pressed) { this.buffered = 0.8; this.animation = 1; this.connected = false; this.intent = requested ?? 'rally'; this.requestAge = 0; this.lockNext = true; }
+    if (pressed) {
+      // Re-pressing inside half a second is a mash, not a swing: it costs power and recovery time.
+      this.flail = MathUtils.clamp(this.requestAge < 0.55 ? this.flail + 0.34 : this.flail - 0.25, 0, 1);
+      // Swinging at nothing costs you the racket; pressing as the shuttle closes does not.
+      if (!this.reachable && !this.nearby) this.whiff = 0.3;
+      this.buffered = 0.8; this.animation = 1; this.connected = false; this.intent = requested ?? 'rally'; this.requestAge = 0; this.lockNext = true;
+    }
     if (held || this.buffered > 0) { this.motion.x += dx; this.motion.y += dy; }
     if (held && this.buffered === 0 && this.cooldown === 0) this.intent = requested ?? 'rally';
     this.motion.clampLength(0, 140);
-    this.armed = (held || this.buffered > 0) && this.cooldown === 0;
+    this.armed = (held || this.buffered > 0) && this.cooldown === 0 && this.whiff === 0;
     this.animation = Math.max(0, this.animation - dt * 3.2);
   }
 
@@ -52,9 +68,10 @@ export class GuidedSwing {
    */
   updateAim(player: PlayerController, contactZ?: number) {
     const live = aimFrom(player, this.intent, this.motion.x, this.motion.y, this.service ?? COURT, contactZ);
-    if (this.lockNext || !this.armed) { this.locked.copy(live); this.lockNext = false; }
+    const pending = this.held || this.buffered > 0;
+    if (this.lockNext || !pending) { this.locked.copy(live); this.lockNext = false; }
     else if (this.held) this.locked.lerp(live, 0.3);
-    this.aim.copy(this.armed ? this.locked : live);
+    this.aim.copy(pending ? this.locked : live);
     this.label = aimLabel(this.aim.x, this.aim.z);
   }
 
@@ -74,6 +91,7 @@ export class GuidedSwing {
     this.reachable = this.canReach(player, shuttle);
     const opportunity = shuttle.position.clone().sub(player.position);
     const ahead = opportunity.x * -Math.sin(player.yaw) + opportunity.z * -Math.cos(player.yaw);
+    this.nearby = shuttle.active && ahead > -0.2 && Math.hypot(opportunity.x, opportunity.z) < 3.4;
     this.smashReady = shuttle.active && shuttle.lastHit === 1 && shuttle.served &&
       Math.hypot(opportunity.x, opportunity.z) < 2.8 && ahead > -0.18 && opportunity.y >= 2.05 && opportunity.y <= 4.2;
     if (this.afterHit > 0) {
@@ -124,32 +142,53 @@ export class GuidedSwing {
     const downward = this.motion.y;
     // Explicit inputs take precedence; legacy flicks still work for players who prefer them.
     const chosen = this.intent !== 'rally' ? this.intent : downward > 28 && shuttle.position.y > 2.15 ? 'smash' : downward > 10 ? 'drop' : 'rally';
-    const timed = this.requestAge < 0.30;
+    // Timing window: a swing needs a moment to travel, and a held button is a stale swing.
+    const rushed = this.requestAge < STRIKE_LATE;
+    const stale = MathUtils.clamp((this.requestAge - STRIKE_EARLY) * 0.7, 0, 0.5);
+    this.power = wasServe ? 1 : MathUtils.clamp(1 - (rushed ? 0.2 : 0) - stale - this.flail * 0.38, 0.42, 1);
+    this.timing = wasServe ? 'Perfect' : rushed ? 'Early' : this.requestAge <= STRIKE_EARLY ? 'Perfect' : stale > 0.28 ? 'Late' : 'Good';
+    const timed = this.timing === 'Perfect';
     const offset = distance / 0.3;
     // Clean contact lands on the mark; a scraped contact scatters around it.
     this.control = wasServe ? 1 : MathUtils.clamp(1 - offset * 0.8 - (timed ? 0 : 0.12), 0, 1);
     const local = nearest.applyQuaternion(racket.rotation.clone().invert());
+    // A weak swing cannot attack, and cannot carry the shuttle to the back court.
+    const starved = chosen === 'smash' && this.power < 0.72;
+    const played: AssistedShot = starved ? 'rally' : chosen;
     const target = wasServe
       ? clampAim(this.locked, 'rally', shuttle.position.z, this.service ?? COURT)
-      : clampAim(this.locked, chosen, shuttle.position.z, this.service ?? COURT);
+      : clampAim(this.locked, played, shuttle.position.z, this.service ?? COURT);
+    if (!wasServe) {
+      const [shallowZ, deepZ] = depthBand(played, 0, Math.abs(shuttle.position.z) < 2.2);
+      target.z = MathUtils.clamp(target.z, MathUtils.lerp(-3.1, deepZ, this.power), shallowZ);
+    }
     if (!wasServe) {
       const drift = 1 - this.control;
       target.x += MathUtils.clamp(local.x / 0.3, -1, 1) * drift * 0.26;
       target.z += MathUtils.clamp(local.y / 0.3, -1, 1) * drift * 0.34;
     }
+    const advice = wasServe ? '' : starved ? 'No swing behind it. Press F as the window closes to attack. '
+      : this.timing === 'Early' ? 'Too early—you met it with no swing. Let it arrive. '
+      : this.timing === 'Late' ? 'You were holding the button. Click as the shuttle arrives. '
+      : this.flail > 0.5 ? 'Mashing costs you power. Wait for the window. ' : '';
     const plan = wasServe ? { velocity: planReturn(shuttle.position, target, 10, 0.22).velocity, shot: 'Serve' as const, attacking: false, feedback: 'In play. Build your opening.' }
-      : planAssistedShot(shuttle.position, target, chosen, timed);
+      : planAssistedShot(shuttle.position, target, played, timed, this.power);
+    if (!wasServe && advice) plan.feedback = advice + plan.feedback;
     const launch = plan.velocity;
     // Assistance is applied at contact only. The outgoing shuttle still obeys normal flight physics.
     shuttle.velocity.copy(launch); shuttle.lastHit = 0; shuttle.served = true; shuttle.crossedNet = false; shuttle.hitCooldown = 0.35;
-    this.buffered = 0; this.cooldown = plan.attacking ? 0.54 : chosen === 'drop' ? 0.28 : 0.42; this.armed = false; this.connected = true; this.afterHit = plan.attacking ? 0.32 : 0.20;
-    this.strokeCenter.copy(racket.center).addScaledVector(this.forward, plan.attacking ? 0.23 : chosen === 'drop' ? 0.035 : 0.08);
+    this.buffered = 0; this.armed = false; this.connected = true; this.afterHit = plan.attacking ? 0.32 : 0.20;
+    // Mashing lengthens the recovery, so a spammer is still swinging when the next ball arrives.
+    this.cooldown = (plan.attacking ? 0.54 : played === 'drop' ? 0.28 : 0.42) * (1 + this.flail * 0.9);
+    this.strokeCenter.copy(racket.center).addScaledVector(this.forward, plan.attacking ? 0.23 : played === 'drop' ? 0.035 : 0.08);
     this.strokeCenter.y -= plan.attacking ? 0.18 : 0;
     this.followRotation.copy(racket.rotation).multiply(this.targetRotation.setFromAxisAngle(new Vector3(1, 0, 0), plan.attacking ? -0.65 : -0.08));
-    racket.vibration = plan.attacking ? 1 : chosen === 'drop' ? 0.28 : 0.65; this.animation = 1;
-    const quality = timed || offset < 0.46 ? 'Perfect' : 'Good';
+    racket.vibration = plan.attacking ? 1 : played === 'drop' ? 0.28 : 0.65 * this.power; this.animation = 1;
+    const quality = offset > 0.82 ? 'Off-center' : this.timing === 'Perfect' ? 'Perfect' : this.timing === 'Good' && offset < 0.46 ? 'Good' : this.timing;
     return { quality, shot: plan.shot, timed: !wasServe && timed, feedback: plan.feedback, speed: launch.length(), offset,
       point: [MathUtils.clamp(local.x / 0.3, -1, 1), MathUtils.clamp(local.y / 0.3, -1, 1)], incidence: 1, target: target.clone() };
   }
   get waitingForShuttle() { return this.held || this.buffered > 0; }
+  /** Seconds since the last press: what the timing window is measured against. */
+  get swingAge() { return this.requestAge; }
 }

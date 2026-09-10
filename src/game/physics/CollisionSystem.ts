@@ -14,8 +14,11 @@ export function racketContact(shuttle: ShuttlecockPhysics, racket: RacketControl
   if (Math.sign(a.z) === Math.sign(b.z) && Math.min(Math.abs(a.z), Math.abs(b.z)) > 0.045) return null;
   const t = MathUtils.clamp(a.z / (a.z - b.z || 0.00001), 0, 1);
   p.lerpVectors(a, b, t);
-  const offset = Math.hypot(p.x / (racket.radiusX + 0.027), p.y / (racket.radiusY + 0.027));
-  if (offset > 1) return null;
+  // A little more bed than the raw frame, plus a frame band: catching it off the strings is
+  // a weak, ugly reply rather than nothing at all. Exact contact is still what wins points.
+  const offset = Math.hypot(p.x / (racket.radiusX + 0.05), p.y / (racket.radiusY + 0.06));
+  if (offset > 1.32) return null;
+  const frame = offset > 1;
   const impactRotation = racket.previousRotation.clone().slerp(racket.rotation, t);
   const arm = p.clone().applyQuaternion(impactRotation);
   const impactVelocity = racket.angularVelocity.clone().cross(arm).add(racket.velocity);
@@ -25,8 +28,9 @@ export function racketContact(shuttle: ShuttlecockPhysics, racket: RacketControl
   const normalSpeed = relative.dot(face);
   if (normalSpeed < 0.3) return null;
   const timing = relative.clone().normalize().dot(face);
-  const quality: ContactQuality = offset > 0.72 ? 'Off-center' : timing < 0.42 ? (racket.gesture.y > 0 ? 'Early' : 'Late') : offset < 0.34 && timing > 0.78 ? 'Perfect' : 'Good';
-  const efficiency = 1 - offset * offset * 0.42;
+  const quality: ContactQuality = frame || offset > 0.72 ? 'Off-center' : timing < 0.42 ? (racket.gesture.y > 0 ? 'Early' : 'Late') : offset < 0.34 && timing > 0.78 ? 'Perfect' : 'Good';
+  // Off the strings the frame still blocks the shuttle, but it comes back slow and flat.
+  const efficiency = frame ? 0.62 : 1 - offset * offset * 0.42;
   // Restitution transfers normal face velocity; tangential stroke adds slice.
   const outgoing = shuttle.velocity.clone().addScaledVector(face, normalSpeed * 1.62 * efficiency).addScaledVector(impactVelocity, 0.32 * efficiency);
   if (quality === 'Off-center') outgoing.x += p.x * normalSpeed * 1.5;

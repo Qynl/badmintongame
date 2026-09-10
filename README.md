@@ -1,6 +1,17 @@
-# Feather 2.4 — Aim & placement
+# Feather 2.5 — Timing & opponents
 
 A playable first-person badminton prototype for desktop browsers. Built with React 19, Vite, TypeScript, Three.js, React Three Fiber, drei, and Zustand. The menu is a live view of the same court used in gameplay—not a background image.
+
+## 2.5: the swing is the skill, and the opponent has a personality
+
+**Assisted mode stops being a button you can hold. A shrinking ring around the shuttle marks the strike window: swing inside it and the shot is full power, swing early or late and it comes back short and attackable, and mashing the control only costs you.**
+
+- **One strike window:** the ring closes on the shuttle and lights up 0.42 s before contact, staying open for 0.06 s past it. The prediction is a real integration of the live flight — measured mean error 0.034 s across clears, drives, drops and smashes, so the cue is not decoration.
+- **Power comes from timing, not from pressing:** a press inside the window is full power; a rushed jab, a held button, or a stale press each bleed power down toward a 0.42 floor, and a weak swing cannot be sold as a smash (F falls back to a rally and says so).
+- **Mashing is punished:** every extra press inside 0.55 s adds flail, which cuts power and stretches your recovery before the next swing. The HUD shows live power and turns red while you are mashing.
+- **Simulation is exact, but no longer cruel:** the string bed is a little wider, and a shuttle caught on the frame is returned flat and slow instead of being dropped outright — a miss is still a miss. The service toss is lower and slower, hanging inside the legal 1.15 m strike zone instead of dropping through it, and it no longer spawns on the strings. The shuttle tracker now shows in Simulation too.
+- **Four opponent personalities,** layered on top of the difficulty: **Steady** (balanced club play), **Attacker** (faster hands, hits down constantly, gives more away), **Retriever** (quicker feet, nothing free, rarely attacks), **Tactician** (remembers your corners far longer and keeps hitting the one you left). Choose it on the setup screen next to the difficulty.
+- Verified by 21 new tests: window reward, stale-hold and rushed-click penalties, mash cost, smash refusal, whiff lockout, frame contacts versus real misses, a legal slow serve, and the personality effect on attack rate, drop rate and raw attributes.
 
 ## 2.4: the shuttle goes where you aim
 
@@ -13,7 +24,7 @@ A playable first-person badminton prototype for desktop browsers. Built with Rea
 - **Honest planning:** if a very short touch from a low contact cannot both clear the tape and stop in time, the planner deepens the landing and tells you how far off the mark it went, instead of lobbing it and labelling it a drop.
 - **Placement has consequences:** the opponent remembers a repeated corner across points, drifts its recovery toward it, and answers one-sided placement by using the open side.
 - **Rally Run adds a placement challenge:** a fourth rotating objective lights a zone on the court; land a validated return inside it for the bonus. Free practice only — badminton scoring is untouched.
-- Simulation mode is unchanged: no aim marker, no guided reach, exact string-bed contact only.
+- Simulation mode keeps no aim marker and no guided reach.
 
 ## 2.3: a smash starts a fight, not an automatic point
 
@@ -150,7 +161,7 @@ High-frequency simulation stays in mutable engine objects and R3F frame callback
 
 ## Tests
 
-`npm test` runs 130 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
+`npm test` runs 149 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
 
 The 2.1 regression suite additionally verifies no-motion single-click serves and returns with 0–200 ms reaction delays, at least 8 successful connections in 10 repeated feeds, a deterministic 40-second rally without precision aiming, mouse-intent shot variety, no-input/behind-player/out-of-reach rejection, strict-mode preservation, input buffering and capture-warp filtering.
 
@@ -158,7 +169,7 @@ The 2.2 suite verifies net-safe downward smashes from nine court/height combinat
 
 The 2.3 suite adds positional smash defense, bounded movement, seeded placement comparisons, defensive reply variation, actual AI counterattacks, a full smash/block/return exchange, Rally Run validation and reset/storage behavior, and duel scoring/deuce/cap/end changes through the engine.
 
-The 2.4 suite verifies look-to-landing mapping across a full sweep of yaw/pitch (every selectable point stays in court), shot-family depth bands, the diagonal service box, tap-committed versus held-steered aim, off-centre scatter around the mark, corner placement and deep/short separation through the live engine, aim telemetry, serve placement, Simulation isolation, opponent corner memory and open-side replies, the Rally Run placement challenge, and honest deepening of an impossible touch.
+The suite (149 tests, 12 files) verifies look-to-landing mapping across a full sweep of yaw/pitch (every selectable point stays in court), shot-family depth bands, the diagonal service box, tap-committed versus held-steered aim, off-centre scatter around the mark, corner placement and deep/short separation through the live engine, aim telemetry, serve placement, Simulation isolation, opponent corner memory and open-side replies, the Rally Run placement challenge, and honest deepening of an impossible touch.
 
 Browser smoke tests:
 

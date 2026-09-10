@@ -5,7 +5,9 @@ import { classifyShot } from '../physics/CollisionSystem';
 import type { ShotType } from '../../state/gameStore';
 import { planAssistedShot } from '../player/ShotPlanner';
 import { predictFlight, planReturn, planIntercept } from './Prediction';
-import { chooseShot, levels } from './DecisionMaking';
+import { chooseShot } from './DecisionMaking';
+import { profiled, styles } from './Styles';
+import type { OpponentStyle } from './Styles';
 import type { Difficulty } from '../../state/gameStore';
 export class OpponentAI {
   position = new Vector3(-0.9, 0, -3.8); velocity = new Vector3(); target = this.position.clone();
@@ -17,8 +19,8 @@ export class OpponentAI {
   private readThisFlight = false;
   private predictionTimer = 0; private error = new Vector3(); private direction = new Vector3();
   reset() { this.target.copy(this.position); this.velocity.set(0, 0, 0); this.reaction = 0; this.lastFlight = -1; this.mayHit = true; this.leavingOut = false; this.predictionTimer = 0; this.pressure = 0; this.returns = 0; this.lunge = 0; this.stamina = 1; this.recovering = 0; this.lastShot = null; this.attacked = false; }
-  step(dt: number, shuttle: ShuttlecockPhysics, player: Vector3, difficulty: Difficulty, hits: number, friendly = false, relaxed = false): boolean {
-    const level = levels[difficulty];
+  step(dt: number, shuttle: ShuttlecockPhysics, player: Vector3, difficulty: Difficulty, hits: number, friendly = false, relaxed = false, style: OpponentStyle = 'steady'): boolean {
+    const level = profiled(difficulty, style), personality = styles[style];
     this.lunge = Math.max(0, this.lunge - dt); this.recovering = Math.max(0, this.recovering - dt);
     this.stamina = Math.min(1, this.stamina + dt * 0.24);
     this.swing = Math.max(0, this.swing - dt * 2.7);
@@ -36,7 +38,8 @@ export class OpponentAI {
       if (!this.readThisFlight) {
         this.shortMemory = this.shortMemory * 0.65 + (Math.abs(prediction.landing.z) < 2.2 ? 0.35 : 0);
         // Remember a repeated corner across points, so one-sided placement stops being free.
-        this.sideMemory = this.sideMemory * 0.62 + MathUtils.clamp(prediction.landing.x / 2.4, -1, 1) * 0.38;
+        const weight = Math.min(0.62, 0.38 * personality.memory);
+        this.sideMemory = this.sideMemory * (1 - weight) + MathUtils.clamp(prediction.landing.x / 2.4, -1, 1) * weight;
         this.readThisFlight = true;
       }
       const judgedX = prediction.landing.x + this.error.x, judgedZ = prediction.landing.z + this.error.z;
@@ -62,7 +65,7 @@ export class OpponentAI {
     this.stride += this.velocity.length() * dt * 3.3; this.racketTarget.copy(shuttle.position);
     const reach = Math.hypot(shuttle.position.x - this.position.x, shuttle.position.z - this.position.z);
     if (incoming && this.mayHit && !this.leavingOut && this.reaction === 0 && shuttle.hitCooldown <= (this.attacked ? 0.23 : 0) && shuttle.position.z < -0.2 && shuttle.position.y > (this.attacked ? 0.25 : 0.65) && shuttle.position.y < (relaxed ? 2.55 : 3.05) && reach < (this.attacked ? this.lunge > 0 ? 1.65 : 1.4 : 1.1) && shuttle.velocity.y < 2) {
-      const decision = chooseShot(shuttle.position, player, difficulty, friendly, { pressure: this.pressure, sequence: this.returns, relaxed, sideBias: this.sideMemory });
+      const decision = chooseShot(shuttle.position, player, difficulty, friendly, { pressure: this.pressure, sequence: this.returns, relaxed, sideBias: this.sideMemory, attack: personality.attack });
       const plan = decision.target.y > 0 ? planIntercept(shuttle.position, decision.target, decision.loft) : planReturn(shuttle.position, decision.target, decision.loft, difficulty === 'casual' ? 0.35 : 0.12);
       let outgoing = plan.velocity;
       this.lastShot = classifyShot(outgoing, shuttle.position, plan.landing);

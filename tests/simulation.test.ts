@@ -43,3 +43,31 @@ describe('athletic movement', () => {
   it('accelerates and must plant before reversing', () => { const player = new PlayerController(), i = input(); i.keys.add('KeyD'); player.step(1 / 120, i, settings, 0, 0); expect(player.velocity.x).toBeLessThan(0.2); for (let n = 0; n < 60; n++) player.step(1 / 120, i, settings, 0, 0); expect(player.velocity.x).toBeCloseTo(3.5); i.keys.delete('KeyD'); i.keys.add('KeyA'); player.step(1 / 120, i, settings, 0, 0); expect(player.velocity.x).toBeGreaterThan(3); });
   it('lands after a jump without sinking below the surface', () => { const p = new PlayerController(), i = input(); i.jump = true; p.step(1 / 120, i, settings, 0, 0); expect(p.position.y).toBeGreaterThan(0); for (let n = 0; n < 180; n++) p.step(1 / 120, i, settings, 0, 0); expect(p.position.y).toBe(0); });
 });
+
+describe('Simulation stays exact but stops being cruel', () => {
+  it('plays a shuttle caught on the frame instead of dropping the rally', () => {
+    const frame = collision(0.22), clean = collision();
+    const hit = racketContact(frame.s, frame.r);
+    expect(hit?.quality).toBe('Off-center');
+    expect(frame.s.velocity.z).toBeLessThan(0);
+    expect(hit!.speed).toBeLessThan(racketContact(clean.s, clean.r)!.speed * 0.75);
+  });
+  it('still lets a shuttle past when the racket is nowhere near it', () => {
+    expect(racketContact(...Object.values(collision(0.34)) as [ShuttlecockPhysics, RacketController])).toBeNull();
+  });
+  it('releases the service toss low, slow and clear of the strings', async () => {
+    const { GameEngine } = await import('../src/game/GameEngine');
+    const { useGameStore } = await import('../src/state/gameStore');
+    useGameStore.getState().setSettings({ controls: 'simulation' });
+    useGameStore.getState().start('match');
+    const e = new GameEngine();
+    e.input = { keys: new Set(), locked: true, dx: 0, dy: 0, swinging: false, serve: false, jump: false } as InputManager;
+    e.frame(1 / 120); e.cooldown = 0; e.input.serve = true; e.frame(1 / 120);
+    // The toss is a real shot, not an automatic contact, and it never rises above 1.15 m.
+    expect(useGameStore.getState().contacts).toBe(0);
+    expect(e.shuttle.position.y).toBeGreaterThan(0.6); expect(e.shuttle.position.y).toBeLessThan(1.15);
+    let legal = 0, frames = 0;
+    for (let i = 0; i < 90 && e.shuttle.active; i++) { e.frame(1 / 120); frames++; if (e.shuttle.position.y < 1.15) legal++; }
+    expect(legal).toBe(frames); expect(frames).toBeGreaterThan(20);
+  });
+});
