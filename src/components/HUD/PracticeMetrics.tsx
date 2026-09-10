@@ -33,7 +33,7 @@ export function PracticeMetrics() {
     <div className="metric-row"><span>Racket speed</span><strong>{racketSpeed.toFixed(1)} <small>KM/H</small></strong></div>
     <div className="metric-row"><span>Shuttle off strings</span><strong>{speed.toFixed(0)} <small>KM/H</small></strong></div>
     <div className="metric-row"><span>Racket contacts</span><strong>{contacts}</strong></div>
-    {assisted && <div className="metric-row"><span>Placement <small>{placementShots ? `${onTarget}/${placementShots} ON MARK` : 'AIM · LOOK WHERE YOU WANT IT'}</small></span><strong>{placement === null ? '—' : `${placement.toFixed(2)} <small>M</small>`}<small>{placementAvg > 0 ? ` AVG ${placementAvg.toFixed(2)}` : ''}</small></strong></div>}
+    {assisted && <div className="metric-row"><span>Placement <small>{placementShots ? `${onTarget}/${placementShots} ON MARK` : 'AIM · LOOK WHERE YOU WANT IT'}</small></span><strong>{placement === null ? '—' : <>{placement.toFixed(2)} <small>M</small></>}<small>{placementAvg > 0 ? ` AVG ${placementAvg.toFixed(2)}` : ''}</small></strong></div>}
     <div className="contact-coach"><span>ONE SMALL ADJUSTMENT</span><p>{feedback || 'Move into position before you swing. The shuttle will come to you.'}</p></div>
   </aside>}{mode === 'training' && <TrainingGoal/>}{mode === 'practice' && <RunChallenge/>}</>;
 }

@@ -11,6 +11,12 @@ import { inView, VIEW_ASPECT } from './ViewGate';
 import type { AimBox } from './AimSystem';
 import { planReturn } from '../ai/Prediction';
 
+/**
+ * A swing that connects with nothing puts the racket down for a moment. Short on purpose: you
+ * should feel the miss, not lose the rally to it. A swing that connects never waits for this.
+ */
+export const WHIFF_NEAR = 0.22; export const WHIFF_WIDE = 0.32;
+
 /** Accessible controls, deliberately separate from the strict string-bed simulation. */
 export class GuidedSwing {
   buffered = 0;
@@ -48,6 +54,7 @@ export class GuidedSwing {
   private strokeCenter = new Vector3();
 
   input(dt: number, pressed: boolean, held: boolean, dx: number, dy: number, requested?: AssistedShot) {
+    const wasArmed = this.armed;
     this.requestAge += dt;
     this.buffered = Math.max(0, this.buffered - dt); this.cooldown = Math.max(0, this.cooldown - dt);
     this.afterHit = Math.max(0, this.afterHit - dt); this.held = held;
@@ -58,13 +65,17 @@ export class GuidedSwing {
       // Re-pressing inside half a second is a mash, not a swing: it costs power and recovery time.
       this.flail = MathUtils.clamp(this.requestAge < 0.55 ? this.flail + 0.34 : this.flail - 0.25, 0, 1);
       // Swinging at nothing costs you the racket; pressing as the shuttle closes does not.
-      if (!this.reachable && !this.nearby) this.whiff = 0.3;
+      if (!this.reachable && !this.nearby) this.whiff = WHIFF_WIDE;
       this.buffered = 0.8; this.animation = 1; this.connected = false; this.intent = requested ?? 'rally'; this.requestAge = 0; this.lockNext = true;
     }
     if (held || this.buffered > 0) { this.motion.x += dx; this.motion.y += dy; }
     if (held && this.buffered === 0 && this.cooldown === 0) this.intent = requested ?? 'rally';
     this.motion.clampLength(0, 140);
     this.armed = (held || this.buffered > 0) && this.cooldown === 0 && this.whiff === 0;
+    // A swing that ends without contact is a miss, and a miss costs a short recovery: mash at
+    // air and the racket is not there for the ball that follows. A clean contact sets `connected`
+    // and takes the normal follow-through instead, so hitting is never delayed by this.
+    if (wasArmed && !this.armed && !this.connected) this.whiff = this.nearby ? WHIFF_NEAR : WHIFF_WIDE;
     this.animation = Math.max(0, this.animation - dt * 3.2);
   }
 
@@ -187,7 +198,7 @@ export class GuidedSwing {
     const launch = plan.velocity;
     // Assistance is applied at contact only. The outgoing shuttle still obeys normal flight physics.
     shuttle.velocity.copy(launch); shuttle.lastHit = 0; shuttle.served = true; shuttle.crossedNet = false; shuttle.hitCooldown = 0.35;
-    this.buffered = 0; this.armed = false; this.connected = true; this.afterHit = plan.attacking ? 0.32 : 0.20;
+    this.buffered = 0; this.armed = false; this.connected = true; this.whiff = 0; this.afterHit = plan.attacking ? 0.32 : 0.20;
     // Mashing lengthens the recovery, so a spammer is still swinging when the next ball arrives.
     this.cooldown = (plan.attacking ? 0.54 : played === 'drop' ? 0.28 : 0.42) * (1 + this.flail * 0.9);
     this.strokeCenter.copy(racket.center).addScaledVector(this.forward, plan.attacking ? 0.23 : played === 'drop' ? 0.035 : 0.08);
@@ -201,4 +212,6 @@ export class GuidedSwing {
   get waitingForShuttle() { return this.held || this.buffered > 0; }
   /** Seconds since the last press: what the timing window is measured against. */
   get swingAge() { return this.requestAge; }
+  /** True while the racket recovers from a swing that met nothing. */
+  get recovering() { return this.whiff > 0; }
 }

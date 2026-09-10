@@ -197,7 +197,7 @@ export class GameEngine {
       }
       this.aimVisible = state.settings.controls === 'assisted' && !this.transition.active &&
         (this.shuttle.active ? this.shuttle.lastHit === 1 || !this.shuttle.served : state.mode !== 'match' || this.match.score.server === 0);
-      useGameStore.setState({ replyPulse: this.replyPulse, bestRally: Math.max(state.bestRally, this.match.hits), smashReady: this.guide.smashReady && this.shuttle.active, selectedShot: this.guide.intent, reachReady: this.guide.reachable && this.shuttle.active, shuttleSeen: this.guide.seen, swingReady: this.guide.armed, contactPulse: this.contactPulse, racketSpeed: this.racket.velocity.length() * 3.6, courtFade: this.transition.opacity,
+      useGameStore.setState({ replyPulse: this.replyPulse, bestRally: Math.max(state.bestRally, this.match.hits), smashReady: this.guide.smashReady && this.shuttle.active, selectedShot: this.guide.intent, reachReady: this.guide.reachable && this.shuttle.active, shuttleSeen: this.guide.seen, swingMissed: this.guide.recovering, swingReady: this.guide.armed, contactPulse: this.contactPulse, racketSpeed: this.racket.velocity.length() * 3.6, courtFade: this.transition.opacity,
         aimLabel: this.guide.label, aimArmed: this.guide.armed, aimVisible: this.aimVisible,
         nextFeed: !this.shuttle.active && state.mode !== 'match' ? Math.max(0, this.cooldown) : 0 });
       audio.volume(state.settings.volume); audio.listener(this.player.head, this.forward.set(0, 0, -1).applyQuaternion(this.player.rotation));
