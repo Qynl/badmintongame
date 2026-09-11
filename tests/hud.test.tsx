@@ -4,7 +4,10 @@ import { act, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { PracticeMetrics } from '../src/components/HUD/PracticeMetrics';
 import { SwingCoach } from '../src/components/HUD/SwingCoach';
-import { useGameStore } from '../src/state/gameStore';
+import { defaultSettings, useGameStore, validateSettings } from '../src/state/gameStore';
+import { GameHUD } from '../src/components/HUD/GameHUD';
+import { GameEngine } from '../src/game/GameEngine';
+import type { InputManager } from '../src/game/input/InputManager';
 
 // Mounted for real, so the DOM is the evidence: a tag that ended up inside a string shows up
 // as text here instead of as an element.
@@ -57,5 +60,48 @@ describe('swing coach states', () => {
     expect(el.textContent).toContain('CONNECT AND YOU CAN SWING STRAIGHT AWAY');
     act(() => useGameStore.setState({ swingMissed: false }));
     expect(el.textContent).not.toContain('You swung at nothing.');
+  });
+});
+
+describe('a smaller, quieter HUD', () => {
+  it('fades the panels while the shuttle is in the air', () => {
+    useGameStore.getState().setSettings({ controls: 'assisted', guides: true, minimal: false });
+    useGameStore.setState({ phase: 'playing', mode: 'match', rallyActive: true });
+    const el = mount(<GameHUD/>);
+    expect(el.querySelector('.game-hud')?.className).toContain('hud-quiet');
+    act(() => useGameStore.setState({ rallyActive: false }));
+    expect(el.querySelector('.game-hud')?.className).not.toContain('hud-quiet');
+  });
+  it('hides the coach and the metrics when the player asks for a minimal HUD', () => {
+    useGameStore.getState().setSettings({ controls: 'assisted', guides: true, minimal: true });
+    useGameStore.setState({ rally: 4, rallyActive: true, shuttleSeen: true, swingMissed: false, contactPulse: 0 });
+    expect(mount(<SwingCoach/>).innerHTML).toBe('');
+    useGameStore.getState().setSettings({ impact: true });
+    expect(mount(<PracticeMetrics/>).querySelector('.practice-metrics')).toBeNull();
+    const el = mount(<GameHUD/>);
+    expect(el.querySelector('.game-hud')?.className).toContain('minimal');
+  });
+  it('names the personality you are playing against', () => {
+    useGameStore.getState().setSettings({ controls: 'assisted', minimal: false, opponent: 'retriever' });
+    useGameStore.setState({ phase: 'playing', mode: 'match', rallyActive: false });
+    const el = mount(<GameHUD/>);
+    expect(el.querySelector('.opponent-score')?.textContent).toContain('Retriever');
+  });
+  it('stores the preference and defaults to the full HUD', () => {
+    expect(defaultSettings.minimal).toBe(false);
+    expect(validateSettings({ ...defaultSettings, minimal: true }).minimal).toBe(true);
+    expect(validateSettings({ ...defaultSettings, minimal: 'yes' }).minimal).toBe(false);
+  });
+  it('remembers the fastest shot of the session', () => {
+    useGameStore.getState().setSettings({ controls: 'assisted', guides: true, minimal: false, difficulty: 'casual' });
+    useGameStore.getState().start('practice');
+    const e = new GameEngine();
+    e.input = { keys: new Set(), locked: true, swinging: false, dropHeld: false, swingPressed: false, pendingShot: null, serve: false, dx: 0, dy: 0, jump: false } as InputManager;
+    e.frame(1 / 120); e.cooldown = 0; e.input.swinging = true;
+    for (let i = 0; i < 900 && !useGameStore.getState().contacts; i++) e.frame(1 / 120);
+    const state = useGameStore.getState();
+    expect(state.contacts).toBeGreaterThan(0);
+    expect(state.topSpeed).toBeGreaterThan(10);
+    expect(state.topSpeed).toBeCloseTo(state.speed, 6);
   });
 });

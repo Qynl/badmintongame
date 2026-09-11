@@ -1,4 +1,14 @@
-# Feather 2.5 — Timing, eyes on the ball, opponents
+# Feather 2.6 — A steady camera and a clear court
+
+**Two things got in the way of the rally: the view could snap by itself, and the interface sat on top of the shuttle. Both are fixed, and the HUD now gets out of the way while the ball is in the air.**
+
+- **No more camera snaps.** Look input is bounded at both ends: a single impossible jump (over 1200 px in one mouse event — pointer lock re-engaging, or a warp from the browser) is dropped outright, and one frame can turn at most 900 px of accumulated movement, about 93° at default sensitivity. A stalled frame releasing a pile of queued moves can no longer slam the view to its pitch limit. An ordinary flick is untouched: 240 px still turns the view exactly 0.432 rad.
+- **The HUD stops covering the court.** The top band is a third shorter and much fainter, the scoreboard digits are 31 px instead of 45, and every panel fades back while the shuttle is in the air — score and metrics to 45 %, the coach to 82 % so the strike cue stays readable.
+- **Minimal HUD:** one switch in Settings hides the coach, the shot bar, the metrics panel and the key hints entirely. The preference persists.
+- **The shuttle is easier to keep:** the short trail now runs in matches in both control modes (16 points in Assisted, 12 in Simulation) instead of practice only, so a high ball can be tracked against the roof.
+- **New on the scoreboard and stats:** the personality you are playing against is named next to OPPONENT, and the pause menu and match result now report the fastest shot of the session in km/h.
+
+## Feather 2.5 — Timing, eyes on the ball, opponents
 
 A playable first-person badminton prototype for desktop browsers. Built with React 19, Vite, TypeScript, Three.js, React Three Fiber, drei, and Zustand. The menu is a live view of the same court used in gameplay—not a background image.
 
@@ -164,7 +174,7 @@ High-frequency simulation stays in mutable engine objects and R3F frame callback
 
 ## Tests
 
-`npm test` runs 163 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
+`npm test` runs 175 tests covering deuce, the 30-point cap, best-of-three, end changes, boundary/service rules, drag stability, terminal velocity, substep consistency, trajectory prediction, launch solving, swept contact, off-center energy loss, contact cooldown, net crossing, shot classification, momentum, jumping, and a motion-driven legal serve through the full engine. V2 adds tape/mesh/under-net distinctions, grip continuity, damped recovery, hidden repositioning, pause/reset isolation, target-zone assessment, AI net clearance, final-game history, malformed settings, feed restarts and rematch state resets.
 
 The 2.1 regression suite additionally verifies no-motion single-click serves and returns with 0–200 ms reaction delays, at least 8 successful connections in 10 repeated feeds, a deterministic 40-second rally without precision aiming, mouse-intent shot variety, no-input/behind-player/out-of-reach rejection, strict-mode preservation, input buffering and capture-warp filtering.
 
@@ -172,7 +182,7 @@ The 2.2 suite verifies net-safe downward smashes from nine court/height combinat
 
 The 2.3 suite adds positional smash defense, bounded movement, seeded placement comparisons, defensive reply variation, actual AI counterattacks, a full smash/block/return exchange, Rally Run validation and reset/storage behavior, and duel scoring/deuce/cap/end changes through the engine.
 
-The suite (163 tests, 14 files) verifies look-to-landing mapping across a full sweep of yaw/pitch (every selectable point stays in court), shot-family depth bands, the diagonal service box, tap-committed versus held-steered aim, off-centre scatter around the mark, corner placement and deep/short separation through the live engine, aim telemetry, serve placement, Simulation isolation, opponent corner memory and open-side replies, the Rally Run placement challenge, and honest deepening of an impossible touch.
+The suite (175 tests, 16 files) verifies look-to-landing mapping across a full sweep of yaw/pitch (every selectable point stays in court), shot-family depth bands, the diagonal service box, tap-committed versus held-steered aim, off-centre scatter around the mark, corner placement and deep/short separation through the live engine, aim telemetry, serve placement, Simulation isolation, opponent corner memory and open-side replies, the Rally Run placement challenge, and honest deepening of an impossible touch.
 
 Browser smoke tests:
 

@@ -2,6 +2,7 @@ import { ArrowDownRight, Crosshair, EyeOff, Hand, Timer, Wind, Zap } from 'lucid
 import { useGameStore } from '../../state/gameStore';
 export function SwingCoach() {
   const assisted = useGameStore((s) => s.settings.controls === 'assisted');
+  const minimal = useGameStore((s) => s.settings.minimal);
   const guides = useGameStore((s) => s.settings.guides), reach = useGameStore((s) => s.reachReady);
   const armed = useGameStore((s) => s.swingReady), pulse = useGameStore((s) => s.contactPulse);
   const shot = useGameStore((s) => s.shot), timed = useGameStore((s) => s.timedContact), speed = useGameStore((s) => s.speed);
@@ -11,7 +12,7 @@ export function SwingCoach() {
   const power = useGameStore((s) => s.swingPower), flail = useGameStore((s) => s.flail);
   const seen = useGameStore((s) => s.shuttleSeen), rally = useGameStore((s) => s.rally);
   const missed = useGameStore((s) => s.swingMissed);
-  if (!assisted || !guides) return null;
+  if (!assisted || !guides || minimal) return null;
   const smashing = pulse > 0 && shot === 'Smash', dropping = pulse > 0 && (shot === 'Drop' || shot === 'Net shot');
   // Nothing connects with a shuttle you cannot see, so say that instead of leaving it mysterious.
   const blind = rally > 0 && !seen, recovering = missed && pulse <= 0;

@@ -11,7 +11,7 @@ import { MatchManager } from './match/MatchManager';
 import { RallyTransition } from './match/RallyTransition';
 import { servicePositions } from './match/ServeSystem';
 import { racketContact, netCrossing } from './physics/CollisionSystem';
-import { InputManager } from './input/InputManager';
+import { InputManager, MAX_FRAME_LOOK } from './input/InputManager';
 import { predictFlight, planReturn, planIntercept, sampleFlight } from './ai/Prediction';
 import { serviceBox } from './player/AimSystem';
 import { RallyRun } from './training/RallyRun';
@@ -99,7 +99,10 @@ export class GameEngine {
     this.accumulator += Math.min(delta, 0.08);
     const count = Math.floor(this.accumulator / (1 / 120));
     if (!count) return;
-    const dx = this.input.dx / count, dy = this.input.dy / count; this.input.dx = 0; this.input.dy = 0;
+    // Bound what one frame can turn: a stalled frame must not dump a pile of queued mouse moves
+    // into the camera at once.
+    const look = Math.min(1, MAX_FRAME_LOOK / Math.max(Math.abs(this.input.dx), Math.abs(this.input.dy), 1));
+    const dx = this.input.dx * look / count, dy = this.input.dy * look / count; this.input.dx = 0; this.input.dy = 0;
     for (let i = 0; i < count; i++) { this.step(1 / 120, dx, dy); this.accumulator -= 1 / 120; }
   }
   private step(dt: number, dx: number, dy: number) {
@@ -165,6 +168,7 @@ export class GameEngine {
       audio.sound(contact.shot === 'Smash' ? 'smash' : 'hit', contact.speed, this.shuttle.position);
       useGameStore.setState((s) => ({
         contact: contact.quality, shot: contact.shot, speed: contact.speed * 3.6, contacts: s.contacts + 1,
+        topSpeed: Math.max(s.topSpeed, contact.speed * 3.6),
         trainingHits: s.trainingHits + Number(s.mode === 'training' && contact.shot === s.trainingShot),
         impactPoint: contact.point, timedContact: contact.timed ?? false, feedback: contact.feedback ?? contactAdvice(contact.quality, contact.shot), rally: this.match.hits, message: '',
         placement: error, placementAvg: this.placementShots ? this.placementTotal / this.placementShots : 0,

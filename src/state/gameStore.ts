@@ -10,8 +10,8 @@ export type Quality = 'performance' | 'balanced' | 'ultra';
 export type ContactQuality = 'Perfect' | 'Good' | 'Late' | 'Early' | 'Off-center' | 'Miss';
 export type ShotType = 'Serve' | 'Clear' | 'Drop' | 'Smash' | 'Drive' | 'Lift' | 'Net shot' | 'Push';
 export type TrainingShot = 'Clear' | 'Drop' | 'Smash' | 'Net shot';
-export interface Settings { volume: number; sensitivity: number; quality: Quality; difficulty: Difficulty; opponent: OpponentStyle; trajectory: boolean; impact: boolean; landing: boolean; headMotion: boolean; controls: ControlMode; guides: boolean }
-export const defaultSettings: Settings = { volume: 0.55, sensitivity: 1, quality: 'balanced', difficulty: 'casual', opponent: 'steady', controls: 'assisted', guides: true, trajectory: true, impact: true, landing: true, headMotion: true };
+export interface Settings { volume: number; sensitivity: number; quality: Quality; difficulty: Difficulty; opponent: OpponentStyle; trajectory: boolean; impact: boolean; landing: boolean; headMotion: boolean; controls: ControlMode; guides: boolean; minimal: boolean }
+export const defaultSettings: Settings = { volume: 0.55, sensitivity: 1, quality: 'balanced', difficulty: 'casual', opponent: 'steady', controls: 'assisted', guides: true, minimal: false, trajectory: true, impact: true, landing: true, headMotion: true };
 export function validateSettings(saved: unknown): Settings {
   const result = { ...defaultSettings };
   if (!saved || typeof saved !== 'object') return result;
@@ -22,7 +22,7 @@ export function validateSettings(saved: unknown): Settings {
   if (['casual', 'club', 'expert'].includes(s.difficulty as string)) result.difficulty = s.difficulty as Difficulty;
   if (['assisted', 'simulation'].includes(s.controls as string)) result.controls = s.controls as ControlMode;
   if (isStyle(s.opponent)) result.opponent = s.opponent;
-  for (const key of ['guides', 'trajectory', 'impact', 'landing', 'headMotion'] as const) if (typeof s[key] === 'boolean') result[key] = s[key];
+  for (const key of ['guides', 'minimal', 'trajectory', 'impact', 'landing', 'headMotion'] as const) if (typeof s[key] === 'boolean') result[key] = s[key];
   return result;
 }
 function savedSettings(): Settings {
@@ -35,7 +35,7 @@ const freshSession = () => ({
   contact: null as ContactQuality | null, shot: null as ShotType | null, speed: 0, racketSpeed: 0, contacts: 0,
   trainingHits: 0, trainingAttempts: 0, trainingSuccess: 0, trainingStreak: 0, trainingBestStreak: 0,
   winner: null as 0 | 1 | null, impactPoint: null as [number, number] | null,
-  feedback: '', lastLanding: null as 'Target' | 'In' | 'Out' | null, nextFeed: 0, courtFade: 0, rallies: 0, bestRally: 0, swingReady: false, reachReady: false, contactPulse: 0, smashReady: false, selectedShot: 'rally' as AssistedShot, timedContact: false, swingPower: 1, flail: 0, shuttleSeen: true, swingMissed: false, opponentShot: '' as string, replyPulse: 0, winners: 0, smashWinners: 0, touchWinners: 0,
+  feedback: '', lastLanding: null as 'Target' | 'In' | 'Out' | null, nextFeed: 0, courtFade: 0, rallies: 0, bestRally: 0, swingReady: false, reachReady: false, contactPulse: 0, smashReady: false, selectedShot: 'rally' as AssistedShot, timedContact: false, swingPower: 1, flail: 0, shuttleSeen: true, swingMissed: false, opponentShot: '' as string, replyPulse: 0, winners: 0, smashWinners: 0, touchWinners: 0, topSpeed: 0,
   /** Aim readout: where the marker sits, and how close the last shot landed to it (metres). */
   aimLabel: 'DEEP CENTRE', aimArmed: false, aimVisible: false,
   placement: null as number | null, placementAvg: 0, placementShots: 0, placementOnTarget: 0,

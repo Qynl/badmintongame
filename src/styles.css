@@ -37,3 +37,25 @@
 @media(max-width:600px){.style-options{grid-template-columns:1fr}.style-option{padding:10px}}
 .power-command span{flex:1}.power-bar{display:block;height:3px;border-radius:2px;background:#2b3a2c;overflow:hidden;margin-top:5px}.power-bar i{display:block;height:100%;background:linear-gradient(90deg,#c78d55,#e7c98f)}.power-command.mashing{border-color:#c96a5a}.power-command.mashing .power-bar i{background:#c96a5a}
 .swing-coach.looking-away{border-color:#c9845a}.swing-coach.looking-away strong{color:#f0c39a}
+
+/* 2.6 — the court is the interface: smaller chrome, and it gets out of the way mid-rally. */
+.hud-top{height:96px;padding:18px 28px;background:linear-gradient(#0c181933,transparent)}
+.scoreboard{top:14px;gap:18px;padding:10px 20px 9px}
+.score-person{min-width:44px}
+.score-person>span{font-size:6px;letter-spacing:1.3px}
+.score-person>span em{font-style:normal;color:#8b9c7c;margin-left:5px}
+.score-person strong{font-size:31px;line-height:1.15}
+.score-middle{gap:5px}
+.score-middle>div{font-size:7px;letter-spacing:2px}
+.practice-metrics{width:224px;padding:15px 17px;bottom:78px}
+.practice-metrics .contact-result{font-size:24px;margin:13px 0}
+.metric-row{padding:9px 0}
+.hud-bottom{padding:18px 28px}
+.game-hud .hud-top,.game-hud .scoreboard,.game-hud .practice-metrics,.game-hud .swing-coach,.game-hud .shot-choice-bar,.game-hud .drill-card,.game-hud .training-goal{transition:opacity .3s ease}
+/* While the shuttle is in the air the panels fade back; the score and metrics hide least of all. */
+.game-hud.hud-quiet .hud-top,.game-hud.hud-quiet .scoreboard{opacity:.45}
+.game-hud.hud-quiet .practice-metrics,.game-hud.hud-quiet .drill-card,.game-hud.hud-quiet .training-goal{opacity:.4}
+.game-hud.hud-quiet .swing-coach,.game-hud.hud-quiet .shot-choice-bar{opacity:.82}
+.game-hud.minimal .swing-coach,.game-hud.minimal .shot-choice-bar,.game-hud.minimal .practice-metrics,.game-hud.minimal .hud-bottom,.game-hud.minimal .drill-card{display:none}
+.winner-stats{gap:26px;flex-wrap:wrap}
+.winner-stats>div{min-width:62px}

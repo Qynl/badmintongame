@@ -27,7 +27,8 @@ export function PracticeMetrics() {
   const feedback = useGameStore((s) => s.feedback), landing = useGameStore((s) => s.lastLanding);
   const placement = useGameStore((s) => s.placement), placementAvg = useGameStore((s) => s.placementAvg);
   const placementShots = useGameStore((s) => s.placementShots), onTarget = useGameStore((s) => s.placementOnTarget);
-  return <>{impact && <aside className="practice-metrics" aria-label="Contact lab">
+  const minimal = useGameStore((s) => s.settings.minimal);
+  return <>{impact && !minimal && <aside className="practice-metrics" aria-label="Contact lab">
     <div className="metrics-heading"><SlidersHorizontal size={13}/> CONTACT LAB <span>{assisted ? 'ASSISTED' : 'EXACT'}</span></div>
     <div className="impact-summary"><div className={`contact-result ${contact === 'Perfect' ? 'perfect' : ''}`}>{contact || 'Find the feel.'}<small>{shot || 'Make your first connection'}</small>{landing && <span className={`landing-chip ${landing === 'Target' ? 'on-target' : ''}`}>{landing === 'Target' ? <Target size={10}/> : <Crosshair size={10}/>} {landing === 'Target' ? 'ON TARGET' : landing === 'In' ? 'LANDED IN' : 'OUT / FAULT'}</span>}</div><StringBedImpact/></div>
     <div className="metric-row"><span>Racket speed</span><strong>{racketSpeed.toFixed(1)} <small>KM/H</small></strong></div>

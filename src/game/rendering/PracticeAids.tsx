@@ -4,6 +4,7 @@ import { BufferGeometry, Float32BufferAttribute, Group, Line as ThreeLine, LineB
 import type { GameEngine } from '../GameEngine';
 import { useGameStore } from '../../state/gameStore';
 import { drills, insideTarget } from '../training/Drills';
+import { trail } from './Trail';
 export function PracticeAids({ engine }: { engine: GameEngine }) {
   const mode = useGameStore((s) => s.mode), settings = useGameStore((s) => s.settings), shot = useGameStore((s) => s.trainingShot);
   const marker = useRef<Group>(null), markerMaterial = useRef<MeshBasicMaterial>(null);
@@ -11,12 +12,14 @@ export function PracticeAids({ engine }: { engine: GameEngine }) {
   const geometry = useMemo(() => { const g = new BufferGeometry(); g.setAttribute('position', new Float32BufferAttribute(new Float32Array(140 * 3), 3)); return g; }, []);
   const line = useMemo(() => new ThreeLine(geometry, new LineBasicMaterial({ color: '#e8bb7f', transparent: true, opacity: 0.5 })), [geometry]);
   useFrame(() => {
-    const shortTrail = mode === 'match' && settings.controls === 'assisted' && settings.guides;
-    line.visible = ((mode !== 'match' && settings.trajectory) || shortTrail) && engine.shuttle.active;
-    line.material.opacity = shortTrail ? 0.26 : 0.5;
+    // A short trail in matches so a high shuttle can be tracked against the roof; a long one
+    // outside them. See trail() for which setting each mode listens to.
+    const style = trail(mode, settings), shortTrail = mode === 'match';
+    line.visible = style.visible && engine.shuttle.active;
+    line.material.opacity = style.opacity;
     const path = engine.shuttle.path;
     if (line.visible && (path.length !== lastPointCount.current || path.length === 140)) {
-      const attr = geometry.getAttribute('position'), start = shortTrail ? Math.max(0, path.length - 10) : 0;
+      const attr = geometry.getAttribute('position'), start = shortTrail ? Math.max(0, path.length - style.points) : 0;
       for (let i = start; i < path.length; i++) attr.setXYZ(i - start, path[i].x, path[i].y, path[i].z);
       attr.needsUpdate = true; geometry.setDrawRange(0, path.length - start); geometry.computeBoundingSphere(); lastPointCount.current = path.length;
     }

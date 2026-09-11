@@ -18,6 +18,13 @@ describe('pointer capture and click intent', () => {
     expect(input.dx).toBe(0); expect(input.dy).toBe(0);
     mouse('mousemove', 6, -4); expect(input.dx).toBe(6); expect(input.dy).toBe(-4);
   });
+  it('drops a single impossible jump instead of turning it into a snap', () => {
+    for (let i = 0; i < 3; i++) mouse('mousemove'); // let pointer capture settle first
+    mouse('mousemove', 0, 9000);
+    expect(input.dx).toBe(0); expect(input.dy).toBe(0);
+    mouse('mousemove', 6, -4); // the hand is still there afterwards
+    expect(input.dx).toBe(6); expect(input.dy).toBe(-4);
+  });
   it('does not discard a legitimate fast mouse flick after capture has settled', () => {
     for (let i = 0; i < 3; i++) mouse('mousemove');
     mouse('mousemove', 350, -400); expect(input.dx).toBe(350); expect(input.dy).toBe(-400);
