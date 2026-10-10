@@ -801,3 +801,36 @@ body {
   .controls-hint { display: none; }
   .tier-cards { flex-direction: column; }
 }
+
+/* ── cinematic letterbox bars ── */
+.cine-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: #000;
+  z-index: 30;
+  pointer-events: none;
+  transition: height 0.35s cubic-bezier(0.6, 0, 0.2, 1);
+}
+.cine-bar.top { top: 0; }
+.cine-bar.bottom { bottom: 0; }
+.cine-bar.active { height: 9vh; }
+.cine-bar.active.top { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.7); }
+.cine-bar.active.bottom { box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.7); }
+
+/* ── subtle CRT scanlines ── */
+.scanlines {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 3px,
+    rgba(0, 0, 0, 0.10) 4px
+  );
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}

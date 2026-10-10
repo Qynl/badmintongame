@@ -1,13 +1,38 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { engine } from '../game/engine'
 import { BALL_R, TABLE, HALF_W, HALF_L } from '../game/constants'
 
-const TRAIL_LEN = 26
-const tmpObj = new THREE.Object3D()
-const tmpColor = new THREE.Color()
+const RIBBON_N = 30
+const TRAIL_VERT = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`
+const TRAIL_FRAG = /* glsl */ `
+precision highp float;
+varying vec2 vUv;
+uniform vec3 uColorA;
+uniform vec3 uColorB;
+uniform float uHeat;
+uniform float uOpacity;
+void main() {
+  float f = vUv.x; // 0 tail → 1 head
+  float edge = 1.0 - abs(vUv.y - 0.5) * 2.0;
+  edge = pow(edge, 1.4);
+  float alpha = f * f * edge * uOpacity;
+  vec3 col = mix(uColorA, uColorB, uHeat) * (0.7 + f * 1.3);
+  gl_FragColor = vec4(col, alpha);
+}
+`
+
 const tmpVec = new THREE.Vector3()
+const dirVec = new THREE.Vector3()
+const sideVec = new THREE.Vector3()
+const upVec = new THREE.Vector3(0, 1, 0)
 
 export function BallFX() {
   const mesh = useRef<THREE.Mesh>(null)
@@ -15,20 +40,44 @@ export function BallFX() {
   const light = useRef<THREE.PointLight>(null)
   const shadow = useRef<THREE.Mesh>(null)
   const shadowMat = useRef<THREE.MeshBasicMaterial>(null)
-  const trail = useRef<THREE.InstancedMesh>(null)
+
   const history = useMemo(() => [] as THREE.Vector3[], [])
   const cool = useMemo(() => new THREE.Color('#ffffff'), [])
   const hot = useMemo(() => new THREE.Color('#ffb347'), [])
 
-  useEffect(() => {
-    const t = trail.current
-    if (!t) return
-    tmpObj.scale.setScalar(0.0001)
-    tmpObj.position.set(0, -50, 0)
-    tmpObj.updateMatrix()
-    for (let i = 0; i < TRAIL_LEN; i++) t.setMatrixAt(i, tmpObj.matrix)
-    t.instanceMatrix.needsUpdate = true
+  // ribbon geometry (positions updated per frame)
+  const ribbon = useMemo(() => {
+    const geo = new THREE.BufferGeometry()
+    const positions = new Float32Array(RIBBON_N * 2 * 3)
+    const uvs = new Float32Array(RIBBON_N * 2 * 2)
+    const indices: number[] = []
+    for (let i = 0; i < RIBBON_N; i++) {
+      const f = i / (RIBBON_N - 1)
+      uvs[i * 4] = f
+      uvs[i * 4 + 1] = 0
+      uvs[i * 4 + 2] = f
+      uvs[i * 4 + 3] = 1
+      if (i < RIBBON_N - 1) {
+        const a = i * 2
+        indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
+      }
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+    geo.setIndex(indices)
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1000)
+    return geo
   }, [])
+
+  const trailUniforms = useMemo(
+    () => ({
+      uColorA: { value: new THREE.Color('#38bdf8') },
+      uColorB: { value: new THREE.Color('#ffb347') },
+      uHeat: { value: 0 },
+      uOpacity: { value: 0.85 },
+    }),
+    []
+  )
 
   useFrame(() => {
     const b = engine.ball
@@ -54,15 +103,16 @@ export function BallFX() {
     }
 
     if (mat.current) {
-      tmpColor.copy(cool).lerp(hot, b.heat)
-      mat.current.emissive.copy(tmpColor)
+      tmpVec.set(0, 0, 0)
+      const c = cool.clone().lerp(hot, b.heat)
+      mat.current.emissive.copy(c)
       mat.current.emissiveIntensity = 1.7 + b.heat * 2.6
-      mat.current.color.copy(tmpColor)
+      mat.current.color.copy(c)
     }
     if (light.current) {
       light.current.position.copy(m.position)
       light.current.intensity = b.visible ? 4 + b.heat * 12 : 0
-      light.current.color.copy(tmpColor)
+      light.current.color.copy(cool).lerp(hot, b.heat)
     }
 
     // blob shadow
@@ -73,7 +123,7 @@ export function BallFX() {
       } else {
         sh.visible = true
         const overTable = Math.abs(b.pos.x) <= HALF_W + 0.3 && Math.abs(b.pos.z) <= HALF_L + 0.3
-        sh.position.set(b.pos.x, overTable ? TABLE.H + 0.015 : 0.02, b.pos.z)
+        sh.position.set(b.pos.x, overTable ? TABLE.H + 0.018 : 0.02, b.pos.z)
         const h = Math.max(0, b.pos.y - (overTable ? TABLE.H : 0))
         const f = Math.max(0.15, 1 - h / 3.2)
         sh.scale.setScalar(0.8 + h * 0.25)
@@ -81,32 +131,48 @@ export function BallFX() {
       }
     }
 
-    // trail
-    const t = trail.current
-    if (!t) return
+    // ── ribbon trail ──
     if (b.visible && b.active) {
+      const last = history[history.length - 1]
+      // ball teleported (serve reset / point) → restart the trail
+      if (last && (Math.abs(last.x - b.pos.x) > 0.9 || Math.abs(last.y - b.pos.y) > 0.9 || Math.abs(last.z - b.pos.z) > 0.9)) {
+        history.length = 0
+      }
       history.push(new THREE.Vector3(b.pos.x, b.pos.y, b.pos.z))
-      if (history.length > TRAIL_LEN) history.shift()
+      if (history.length > RIBBON_N) history.shift()
     } else if (history.length) {
       history.shift()
     }
-    for (let i = 0; i < TRAIL_LEN; i++) {
-      const p = history[history.length - 1 - i]
-      if (p && b.visible) {
-        const f = 1 - i / TRAIL_LEN
-        tmpObj.position.copy(p)
-        tmpObj.rotation.set(0, 0, 0)
-        tmpObj.scale.setScalar(Math.max(0.001, BALL_R * 0.92 * f * f))
-      } else {
-        tmpObj.scale.setScalar(0.0001)
-        tmpObj.position.set(0, -10, 0)
+
+    const posAttr = ribbon.getAttribute('position') as THREE.BufferAttribute
+    const n = history.length
+    for (let i = 0; i < RIBBON_N; i++) {
+      const f = i / (RIBBON_N - 1)
+      let px = 0
+      let py = -100
+      let pz = 0
+      let width = 0
+      if (i < n && b.visible) {
+        const p = history[i]
+        px = p.x
+        py = p.y
+        pz = p.z
+        // direction for side vector
+        const q = history[Math.min(i + 1, n - 1)]
+        dirVec.set(q.x - p.x, q.y - p.y, q.z - p.z)
+        if (dirVec.lengthSq() < 1e-8) dirVec.set(0, 0, 1)
+        dirVec.normalize()
+        sideVec.crossVectors(dirVec, upVec)
+        if (sideVec.lengthSq() < 1e-6) sideVec.set(1, 0, 0)
+        sideVec.normalize()
+        width = 0.05 + f * f * 0.3
       }
-      tmpObj.updateMatrix()
-      t.setMatrixAt(i, tmpObj.matrix)
-      t.setColorAt(i, tmpColor.copy(cool).lerp(hot, b.heat))
+      posAttr.setXYZ(i * 2, px - sideVec.x * width, py - sideVec.y * width, pz - sideVec.z * width)
+      posAttr.setXYZ(i * 2 + 1, px + sideVec.x * width, py + sideVec.y * width, pz + sideVec.z * width)
     }
-    t.instanceMatrix.needsUpdate = true
-    if (t.instanceColor) t.instanceColor.needsUpdate = true
+    posAttr.needsUpdate = true
+    trailUniforms.uHeat.value = b.heat
+    trailUniforms.uOpacity.value = b.visible && b.active ? 0.85 : Math.max(0, trailUniforms.uOpacity.value - 0.1)
   })
 
   return (
@@ -115,16 +181,23 @@ export function BallFX() {
         <sphereGeometry args={[BALL_R, 24, 24]} />
         <meshStandardMaterial ref={mat} color="#ffffff" emissive="#ffffff" emissiveIntensity={1.8} roughness={0.2} metalness={0.1} />
       </mesh>
-      <pointLight ref={light} distance={6} decay={2} />
-      {/* blob shadow */}
+      {/* outer glow shell */}
+      <pointLight ref={light} distance={6.5} decay={2} />
       <mesh ref={shadow} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[BALL_R * 1.7, 20]} />
         <meshBasicMaterial ref={shadowMat} color="#000000" transparent opacity={0.35} depthWrite={false} />
       </mesh>
-      <instancedMesh ref={trail} args={[undefined, undefined, TRAIL_LEN]} frustumCulled={false}>
-        <sphereGeometry args={[1, 10, 10]} />
-        <meshBasicMaterial transparent opacity={0.55} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
-      </instancedMesh>
+      <mesh geometry={ribbon} frustumCulled={false}>
+        <shaderMaterial
+          vertexShader={TRAIL_VERT}
+          fragmentShader={TRAIL_FRAG}
+          uniforms={trailUniforms}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
     </group>
   )
 }

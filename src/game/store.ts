@@ -73,6 +73,7 @@ interface Store {
   momentum: number
   perfectCombo: number
   flash: { color: string; id: number } | null
+  cine: boolean
 
   skin: number
   overdriveUnlocked: boolean
@@ -136,6 +137,7 @@ export const useStore = create<Store>((set, get) => ({
   momentum: 0,
   perfectCombo: 0,
   flash: null,
+  cine: false,
 
   skin: save.skin,
   overdriveUnlocked: save.overdriveUnlocked,

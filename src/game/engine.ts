@@ -39,12 +39,19 @@ export type Phase = 'serve' | 'rally' | 'point' | 'over'
 export type HitQuality = 'perfect' | 'good' | 'weak' | 'block' | 'soft'
 
 export interface FXEvent {
-  kind: 'spark' | 'ring'
+  kind: 'spark' | 'ring' | 'pillar'
   pos: Vec3
   color: string
   count: number
   speed: number
   big?: boolean
+}
+
+export interface Ripple {
+  x: number
+  z: number
+  t: number // simTime when spawned
+  s: number // strength
 }
 
 interface Paddle {
@@ -130,6 +137,8 @@ export class Engine {
   perfectCombo = 0
   lastQuality: HitQuality = 'soft'
   hitPulse = 0 // 1 on every hit, decays — drives crowd/lights
+  glitchT = 0 // 1 right after smash/perfect/point — drives screen glitch FX, decays 4/s
+  ripples: Ripple[] = [] // table bounce ripples rendered by the table shader
 
   aiWillSmash = false // decided at reaction time → telegraphed
   aiSmashFlash = 0
@@ -142,7 +151,7 @@ export class Engine {
   }
 
   private acc = 0
-  private simTime = 0
+  simTime = 0
   private pointTimer = 0
   private serveTimer = 0
   private aiPlanT = 0
@@ -316,9 +325,12 @@ export class Engine {
     }
     this.shake = Math.max(0, this.shake - dtReal * 2.4)
     this.fovPunch = Math.max(0, this.fovPunch - dtReal * 3.2)
+    this.glitchT = Math.max(0, this.glitchT - dtReal * 4)
     this.hitPulse = Math.max(0, this.hitPulse - dtReal * 2.6)
     this.aiSmashFlash = Math.max(0, this.aiSmashFlash - dtReal * 2)
     this.ball.squash = Math.max(0, this.ball.squash - dtReal * 7)
+    // expire table ripples
+    while (this.ripples.length && this.simTime - this.ripples[0].t > 1.6) this.ripples.shift()
   }
 
   private stepSim(dt: number) {
@@ -532,6 +544,9 @@ export class Engine {
       b.curveH *= 0.65
       b.curveV *= 0.4
       b.squash = 1
+      if (this.ripples.length < 5) {
+        this.ripples.push({ x: b.pos.x, z: b.pos.z, t: this.simTime, s: clamp(Math.abs(b.vel.y) / 8, 0.3, 1) })
+      }
       this.onBounce()
     }
 
@@ -744,6 +759,7 @@ export class Engine {
       this.slowmoT = Math.max(this.slowmoT, 0.24)
       this.bumpShake(0.42)
       this.fovPunch = 1
+      this.glitchT = Math.max(this.glitchT, 0.7)
       const st = useStore.getState()
       st.showBanner(this.perfectCombo > 1 ? `PERFECT ×${this.perfectCombo}` : 'PERFECT', 'epic')
       st.flashScreen('gold')
@@ -756,6 +772,7 @@ export class Engine {
         this.bumpShake(0.5)
         this.hitStopT = 0.08
         this.fovPunch = 0.8
+        this.glitchT = Math.max(this.glitchT, 1)
         useStore.getState().showBanner('SMASH!', 'epic')
         useStore.getState().flashScreen('white')
       } else {
@@ -815,6 +832,7 @@ export class Engine {
         useStore.getState().showBanner(`${this.aiName} SMASHES`, 'bad')
         sfx.smash()
         this.bumpShake(0.4)
+        this.glitchT = Math.max(this.glitchT, 0.8)
       }
     }
 
@@ -1009,8 +1027,10 @@ export class Engine {
 
     this.emitFX({ ...this.ball.pos }, winner === 'player' ? '#67e8f9' : '#ff5470', 30, 7, true)
     this.pushRing({ ...this.ball.pos }, winner === 'player' ? '#67e8f9' : '#ff5470')
+    this.fx.push({ kind: 'pillar', pos: { ...this.ball.pos }, color: winner === 'player' ? '#22d3ee' : '#f43f5e', count: 0, speed: 0 })
     this.bumpShake(0.45)
     this.fovPunch = 1
+    this.glitchT = Math.max(this.glitchT, 0.6)
 
     const { p, a } = this.score
     const won =

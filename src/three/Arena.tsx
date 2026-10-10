@@ -4,25 +4,6 @@ import { MeshReflectorMaterial } from '@react-three/drei'
 import * as THREE from 'three'
 import { engine } from '../game/engine'
 
-const PILLARS: { x: number; z: number; h: number; w: number }[] = []
-{
-  let seed = 1337
-  const rnd = () => {
-    seed = (seed * 16807) % 2147483647
-    return seed / 2147483647
-  }
-  for (let i = 0; i < 14; i++) {
-    const ang = (i / 14) * Math.PI * 2 + rnd() * 0.4
-    const r = 15 + rnd() * 10
-    PILLARS.push({
-      x: Math.sin(ang) * r,
-      z: Math.cos(ang) * r,
-      h: 2.5 + rnd() * 6,
-      w: 0.5 + rnd() * 1.2,
-    })
-  }
-}
-
 const CROWD_N = 240
 const crowdBase = new Float32Array(CROWD_N * 3)
 const crowdPhase = new Float32Array(CROWD_N)
@@ -73,6 +54,122 @@ function Crowd() {
       <sphereGeometry args={[1, 8, 8]} />
       <meshBasicMaterial transparent opacity={0.75} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
     </instancedMesh>
+  )
+}
+
+const SHARD_N = 46
+const shardBase = new Float32Array(SHARD_N * 4) // radius, height, phase, speed
+for (let i = 0; i < SHARD_N; i++) {
+  shardBase[i * 4] = 8 + Math.random() * 8
+  shardBase[i * 4 + 1] = 1.5 + Math.random() * 6
+  shardBase[i * 4 + 2] = Math.random() * Math.PI * 2
+  shardBase[i * 4 + 3] = (0.04 + Math.random() * 0.12) * (Math.random() < 0.5 ? -1 : 1)
+}
+const shardTmp = new THREE.Object3D()
+
+function Shards() {
+  const inst = useRef<THREE.InstancedMesh>(null)
+  useFrame(({ clock }) => {
+    const m = inst.current
+    if (!m) return
+    const t = clock.elapsedTime
+    for (let i = 0; i < SHARD_N; i++) {
+      const r = shardBase[i * 4]
+      const h = shardBase[i * 4 + 1]
+      const ph = shardBase[i * 4 + 2] + t * shardBase[i * 4 + 3]
+      shardTmp.position.set(Math.sin(ph) * r, h + Math.sin(t * 0.7 + i) * 0.3, Math.cos(ph) * r)
+      shardTmp.rotation.set(t * 0.3 + i, t * 0.5 + i * 2, 0)
+      shardTmp.scale.setScalar(0.1 + (i % 4) * 0.05)
+      shardTmp.updateMatrix()
+      m.setMatrixAt(i, shardTmp.matrix)
+    }
+    m.instanceMatrix.needsUpdate = true
+  })
+  return (
+    <instancedMesh ref={inst} args={[undefined, undefined, SHARD_N]} frustumCulled={false}>
+      <octahedronGeometry args={[1, 0]} />
+      <meshStandardMaterial color="#1e1b4b" emissive="#7c3aed" emissiveIntensity={0.5} roughness={0.3} metalness={0.8} />
+    </instancedMesh>
+  )
+}
+
+function SpotlightTower({ x, z, color, lean }: { x: number; z: number; color: string; lean: number }) {
+  const beam = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => {
+    if (beam.current) {
+      beam.current.rotation.z = lean + Math.sin(clock.elapsedTime * 0.6 + x) * 0.05
+      beam.current.rotation.x = Math.cos(clock.elapsedTime * 0.5 + z) * 0.04
+    }
+  })
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 3.2, 0]}>
+        <cylinderGeometry args={[0.09, 0.16, 6.4, 8]} />
+        <meshStandardMaterial color="#0f0d28" roughness={0.5} metalness={0.7} />
+      </mesh>
+      <mesh position={[0, 6.4, 0]}>
+        <sphereGeometry args={[0.22, 12, 12]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      <pointLight position={[0, 6.2, 0]} intensity={14} color={color} distance={14} />
+      <group ref={beam} position={[0, 6.3, 0]} rotation={[0, Math.atan2(-x, -z), 0]}>
+        <group rotation={[-0.62, 0, 0]}>
+          <mesh position={[0, -3.4, 0]}>
+            <coneGeometry args={[2.4, 7.2, 24, 1, true]} />
+            <meshBasicMaterial color={color} transparent opacity={0.05} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh position={[0, -3.4, 0]}>
+            <coneGeometry args={[1.1, 7.2, 20, 1, true]} />
+            <meshBasicMaterial color={color} transparent opacity={0.05} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+      </group>
+    </group>
+  )
+}
+
+function LaserPerimeter() {
+  const mats = useRef<THREE.MeshBasicMaterial[]>([])
+  useFrame(() => {
+    const glow = 0.35 + engine.hitPulse * 0.65
+    for (const m of mats.current) {
+      if (!m) continue
+      m.opacity = glow * (m.userData.base as number)
+    }
+  })
+  const reg = (el: THREE.MeshBasicMaterial | null, i: number, base: number) => {
+    if (el) {
+      el.userData.base = base
+      mats.current[i] = el
+    }
+  }
+  const W = 7.6
+  const L = 8.6
+  return (
+    <group>
+      {([
+        [0, 0.06, L, W * 2, 0.03, 0],
+        [0, 0.06, -L, W * 2, 0.03, 1],
+        [W, 0.06, 0, 0.03, L * 2, 2],
+        [-W, 0.06, 0, 0.03, L * 2, 3],
+      ] as const).map(([x, y, z, w, d, i]) => (
+        <mesh key={`lf${i}`} position={[x, y, z]}>
+          <boxGeometry args={[w, 0.035, d]} />
+          <meshBasicMaterial ref={(el) => reg(el, i, 0.5)} color="#7c3aed" transparent opacity={0.3} toneMapped={false} />
+        </mesh>
+      ))}
+      {([
+        [W, L],
+        [-W, L],
+        [W, -L],
+        [-W, -L],
+      ] as const).map(([x, z], i) => (
+        <mesh key={`cv${i}`} position={[x, 1.1, z]}>
+          <boxGeometry args={[0.04, 2.2, 0.04]} />
+          <meshBasicMaterial ref={(el) => reg(el, i + 4, 0.8)} color={i % 2 ? '#e879f9' : '#22d3ee'} transparent opacity={0.5} toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
   )
 }
 
@@ -130,37 +227,13 @@ export function Arena() {
         <meshBasicMaterial color="#22d3ee" transparent opacity={0.22} toneMapped={false} />
       </mesh>
 
-      {/* distant pillars */}
-      {PILLARS.map((p, i) => (
-        <group key={i} position={[p.x, 0, p.z]}>
-          <mesh position={[0, p.h / 2, 0]}>
-            <boxGeometry args={[p.w, p.h, p.w]} />
-            <meshStandardMaterial color="#0c0820" roughness={0.7} metalness={0.4} />
-          </mesh>
-          <mesh position={[0, p.h + 0.05, 0]}>
-            <boxGeometry args={[p.w * 1.15, 0.1, p.w * 1.15]} />
-            <meshBasicMaterial color={i % 3 === 0 ? '#f472b6' : i % 3 === 1 ? '#22d3ee' : '#a78bfa'} toneMapped={false} />
-          </mesh>
-        </group>
-      ))}
-
-      {/* synthwave sun */}
-      <group position={[0, 7.2, -30]}>
-        <mesh>
-          <circleGeometry args={[6.5, 48]} />
-          <meshBasicMaterial color="#f43f5e" transparent opacity={0.85} toneMapped={false} />
-        </mesh>
-        <mesh position={[0, 0, 0.05]}>
-          <circleGeometry args={[5.2, 48]} />
-          <meshBasicMaterial color="#fb923c" transparent opacity={0.55} toneMapped={false} />
-        </mesh>
-        {[-2.6, -1.5, -0.6, 0.2, 0.9].map((y, i) => (
-          <mesh key={i} position={[0, y, 0.12]}>
-            <planeGeometry args={[14, 0.22 + i * 0.05]} />
-            <meshBasicMaterial color="#07030f" />
-          </mesh>
-        ))}
-      </group>
+      {/* court dressing */}
+      <SpotlightTower x={-6.8} z={7.8} color="#22d3ee" lean={0.06} />
+      <SpotlightTower x={6.8} z={7.8} color="#e879f9" lean={-0.06} />
+      <SpotlightTower x={-6.8} z={-7.8} color="#e879f9" lean={0.06} />
+      <SpotlightTower x={6.8} z={-7.8} color="#22d3ee" lean={-0.06} />
+      <LaserPerimeter />
+      <Shards />
 
       {/* crowd of light orbs */}
       <Crowd />

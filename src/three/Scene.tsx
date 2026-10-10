@@ -1,6 +1,8 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { engine } from '../game/engine'
 import { updateChargeAudio } from '../game/audio'
+import { useStore } from '../game/store'
+import { Sky } from './Sky'
 import { Arena } from './Arena'
 import { TableMesh } from './TableMesh'
 import { Paddles } from './Paddles'
@@ -16,6 +18,8 @@ function Loop() {
   useFrame((_, dt) => {
     engine.update(Math.min(dt, 0.1))
     updateChargeAudio(engine.player.charging && engine.mode !== 'duel', engine.player.charge)
+    const cine = engine.cinematic && engine.mode !== 'demo'
+    if (useStore.getState().cine !== cine) useStore.setState({ cine })
   })
   return null
 }
@@ -29,8 +33,9 @@ export function Scene() {
       camera={{ fov: 52, position: [0, 4.2, 9.6], near: 0.1, far: 120 }}
       style={{ position: 'absolute', inset: 0 }}
     >
-      <color attach="background" args={['#07030f']} />
-      <fog attach="fog" args={['#07030f', 18, 46]} />
+      <color attach="background" args={['#0a0420']} />
+      <fog attach="fog" args={['#0d0524', 20, 52]} />
+      <Sky />
       <Loop />
       <CameraRig />
 

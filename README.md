@@ -10,6 +10,18 @@ npm run dev      # → http://localhost:5173
 npm run build    # type-check + production build
 ```
 
+## Visuals (the 1000% pass)
+
+Everything in the arena is custom — no flat materials where a shader will do.
+
+- **Sky dome** — a single shader: synthwave striped sun, twinkling star field, horizon glow, and two layered mountain ridges. `fog:false` so it never washes out.
+- **Energy table** — the table surface is a shader: moving grid, glowing center line, racing boundary light, a soft glow that tracks the ball overhead, and **ripple rings** on every bounce (engine pushes ripple events; the shader animates them from sim-time so slow-mo still reads correctly).
+- **Ball** — additive **ribbon light-trail** that stretches, tapers and fades with speed, plus a heat-lerped glow ball and a blob shadow.
+- **Paddles** — shader faces with concentric circuit rings, radial spokes and a rotating energy sweep; charge builds a spiraling particle swirl and a white-hot flash; the AI flashes red when it's about to smash.
+- **FX** — velocity-stretched additive sparks, expanding shock rings, and vertical **score pillars** that erupt when a point is won.
+- **Arena** — reflective floor, bobbing crowd of light orbs, four leaning **spotlight towers** with volumetric beam cones, drifting emissive **shards**, a pulsing **laser perimeter**, glow rings and floating dust.
+- **Post** — Bloom, Chromatic Aberration (which hard-glitches on smash/perfect/point), Vignette, filmic Noise, and **ACES tone-mapping** as the final pass. Slow-mo finishers pull in **cinema letterbox bars** over subtle CRT **scanlines**.
+
 ## Combat model
 
 Every incoming ball gets a **timing ring** that shrinks onto a gold sweet-spot ring at your paddle plane:

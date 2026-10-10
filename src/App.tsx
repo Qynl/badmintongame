@@ -9,6 +9,7 @@ import { initAudio, setMuted } from './game/audio'
 export default function App() {
   const screen = useStore((s) => s.screen)
   const paused = useStore((s) => s.paused)
+  const cine = useStore((s) => s.cine)
 
   // boot into menu demo rally
   useEffect(() => {
@@ -135,6 +136,9 @@ export default function App() {
   return (
     <div className="app-root">
       <Scene />
+      <div className="scanlines" />
+      <div className={`cine-bar top${cine ? ' active' : ''}`} />
+      <div className={`cine-bar bottom${cine ? ' active' : ''}`} />
       <div className="ui-layer">
         <FlashView />
         <BannerView />
