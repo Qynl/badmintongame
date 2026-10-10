@@ -35,10 +35,10 @@ export function CameraRig() {
     } else {
       // behind-the-player view with ball tracking
       const bx = THREE.MathUtils.clamp(ball.x * 0.38, -1.6, 1.6)
-      desired.set(bx, 3.55 + ball.y * 0.12, 9.3)
+      desired.set(bx, 3.3 + ball.y * 0.12, 9.0)
       lookTarget.set(ball.x * 0.22, 0.95, ball.z * 0.12)
-      const targetFov = engine.flowActive ? 46 : 50
-      fov.current = THREE.MathUtils.damp(fov.current, targetFov, 2.5, dt)
+      const targetFov = (engine.flowActive ? 47 : 52) - engine.fovPunch * 7
+      fov.current = THREE.MathUtils.damp(fov.current, targetFov, 6, dt)
     }
 
     const k = engine.cinematic ? 2.2 : 5.5

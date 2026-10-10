@@ -1,6 +1,8 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { MeshReflectorMaterial } from '@react-three/drei'
 import * as THREE from 'three'
+import { engine } from '../game/engine'
 
 const PILLARS: { x: number; z: number; h: number; w: number }[] = []
 {
@@ -19,6 +21,59 @@ const PILLARS: { x: number; z: number; h: number; w: number }[] = []
       w: 0.5 + rnd() * 1.2,
     })
   }
+}
+
+const CROWD_N = 240
+const crowdBase = new Float32Array(CROWD_N * 3)
+const crowdPhase = new Float32Array(CROWD_N)
+{
+  for (let i = 0; i < CROWD_N; i++) {
+    const ang = Math.random() * Math.PI * 2
+    const r = 11 + Math.random() * 13
+    crowdBase[i * 3] = Math.sin(ang) * r
+    crowdBase[i * 3 + 1] = 0.8 + Math.random() * 6.5
+    crowdBase[i * 3 + 2] = Math.cos(ang) * r
+    crowdPhase[i] = Math.random() * Math.PI * 2
+  }
+}
+
+const tmpObj = new THREE.Object3D()
+const tmpColor = new THREE.Color()
+const CROWD_COLORS = ['#22d3ee', '#e879f9', '#a78bfa', '#f472b6', '#818cf8']
+
+function Crowd() {
+  const inst = useRef<THREE.InstancedMesh>(null)
+
+  const colorsSet = useRef(false)
+  useFrame(({ clock }) => {
+    const m = inst.current
+    if (!m) return
+    if (!colorsSet.current) {
+      for (let i = 0; i < CROWD_N; i++) {
+        m.setColorAt(i, tmpColor.set(CROWD_COLORS[i % CROWD_COLORS.length]))
+      }
+      colorsSet.current = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+    }
+    const t = clock.elapsedTime
+    const energy = engine.hitPulse * 0.9 + Math.min(engine.rally / 12, 0.6)
+    for (let i = 0; i < CROWD_N; i++) {
+      const bounce = Math.max(0, Math.sin(t * (2.2 + (i % 5) * 0.3) + crowdPhase[i])) * (0.15 + energy * 0.8)
+      tmpObj.position.set(crowdBase[i * 3], crowdBase[i * 3 + 1] + bounce, crowdBase[i * 3 + 2])
+      const s = 0.09 + (i % 3) * 0.03 + energy * 0.05 * Math.sin(t * 8 + crowdPhase[i])
+      tmpObj.scale.setScalar(Math.max(0.03, s))
+      tmpObj.updateMatrix()
+      m.setMatrixAt(i, tmpObj.matrix)
+    }
+    m.instanceMatrix.needsUpdate = true
+  })
+
+  return (
+    <instancedMesh ref={inst} args={[undefined, undefined, CROWD_N]} frustumCulled={false}>
+      <sphereGeometry args={[1, 8, 8]} />
+      <meshBasicMaterial transparent opacity={0.75} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+    </instancedMesh>
+  )
 }
 
 export function Arena() {
@@ -46,21 +101,33 @@ export function Arena() {
 
   return (
     <group>
-      {/* floor */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
+      {/* reflective floor */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
         <planeGeometry args={[90, 90]} />
-        <meshStandardMaterial color="#0a0618" roughness={0.9} metalness={0.2} />
+        <MeshReflectorMaterial
+          blur={[220, 90]}
+          resolution={1024}
+          mixBlur={0.92}
+          mixStrength={1.4}
+          roughness={0.75}
+          depthScale={1.1}
+          minDepthThreshold={0.4}
+          maxDepthThreshold={1.4}
+          color="#070417"
+          metalness={0.55}
+          mirror={0.45}
+        />
       </mesh>
-      <gridHelper args={[80, 80, '#4c1d95', '#1b1040']} position={[0, 0.001, 0]} />
+      <gridHelper args={[80, 80, '#4c1d95', '#180d38']} position={[0, 0.001, 0]} />
 
-      {/* glow ring around the court */}
+      {/* glow rings around the court */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
         <ringGeometry args={[7.4, 7.55, 64]} />
-        <meshBasicMaterial color="#7c3aed" transparent opacity={0.55} />
+        <meshBasicMaterial color="#7c3aed" transparent opacity={0.55} toneMapped={false} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
         <ringGeometry args={[9.8, 9.86, 64]} />
-        <meshBasicMaterial color="#22d3ee" transparent opacity={0.22} />
+        <meshBasicMaterial color="#22d3ee" transparent opacity={0.22} toneMapped={false} />
       </mesh>
 
       {/* distant pillars */}
@@ -72,7 +139,7 @@ export function Arena() {
           </mesh>
           <mesh position={[0, p.h + 0.05, 0]}>
             <boxGeometry args={[p.w * 1.15, 0.1, p.w * 1.15]} />
-            <meshBasicMaterial color={i % 3 === 0 ? '#f472b6' : i % 3 === 1 ? '#22d3ee' : '#a78bfa'} />
+            <meshBasicMaterial color={i % 3 === 0 ? '#f472b6' : i % 3 === 1 ? '#22d3ee' : '#a78bfa'} toneMapped={false} />
           </mesh>
         </group>
       ))}
@@ -81,13 +148,12 @@ export function Arena() {
       <group position={[0, 7.2, -30]}>
         <mesh>
           <circleGeometry args={[6.5, 48]} />
-          <meshBasicMaterial color="#f43f5e" transparent opacity={0.85} />
+          <meshBasicMaterial color="#f43f5e" transparent opacity={0.85} toneMapped={false} />
         </mesh>
         <mesh position={[0, 0, 0.05]}>
           <circleGeometry args={[5.2, 48]} />
-          <meshBasicMaterial color="#fb923c" transparent opacity={0.55} />
+          <meshBasicMaterial color="#fb923c" transparent opacity={0.55} toneMapped={false} />
         </mesh>
-        {/* horizontal slats */}
         {[-2.6, -1.5, -0.6, 0.2, 0.9].map((y, i) => (
           <mesh key={i} position={[0, y, 0.12]}>
             <planeGeometry args={[14, 0.22 + i * 0.05]} />
@@ -95,6 +161,9 @@ export function Arena() {
           </mesh>
         ))}
       </group>
+
+      {/* crowd of light orbs */}
+      <Crowd />
 
       {/* floating dust */}
       <points ref={dust} geometry={dustGeo}>

@@ -70,6 +70,9 @@ interface Store {
   banner: Banner | null
   paused: boolean
   muted: boolean
+  momentum: number
+  perfectCombo: number
+  flash: { color: string; id: number } | null
 
   skin: number
   overdriveUnlocked: boolean
@@ -93,6 +96,9 @@ interface Store {
   setFlow(f: number, active: boolean): void
   setCharge(c: number): void
   setMatchPoint(s: Side | null): void
+  setMomentum(m: number): void
+  setPerfectCombo(c: number): void
+  flashScreen(color: 'gold' | 'cyan' | 'red' | 'white'): void
   showBanner(text: string, tone: Banner['tone'], sub?: string): void
   clearBanner(): void
   setPaused(p: boolean): void
@@ -127,6 +133,9 @@ export const useStore = create<Store>((set, get) => ({
   banner: null,
   paused: false,
   muted: false,
+  momentum: 0,
+  perfectCombo: 0,
+  flash: null,
 
   skin: save.skin,
   overdriveUnlocked: save.overdriveUnlocked,
@@ -235,6 +244,12 @@ export const useStore = create<Store>((set, get) => ({
   setFlow: (f, active) => set({ flow: f, flowActive: active }),
   setCharge: (c) => set({ charge: c }),
   setMatchPoint: (s) => set({ matchPoint: s }),
+  setMomentum: (m) => set({ momentum: m }),
+  setPerfectCombo: (c) => set({ perfectCombo: c }),
+  flashScreen: (color) => {
+    bannerId++
+    set({ flash: { color, id: bannerId } })
+  },
 
   showBanner: (text, tone, sub) => {
     bannerId++

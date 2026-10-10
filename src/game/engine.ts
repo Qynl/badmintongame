@@ -1,7 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // NEON SMASH core engine: deterministic fixed-step table tennis simulation.
-// Runs outside React; three.js layer reads state every frame, UI subscribes to
-// the zustand store which the engine pushes discrete events into.
+// Combat model v2:
+//   • no press  → SOFT safe return
+//   • hold      → charge power
+//   • release timing vs contact: PERFECT (≤100ms) / GOOD (≤260ms) / WEAK
+//   • PERFECT extends reach, boosts speed, triggers slow-mo + combo
+//   • still holding at contact → BLOCK (medium power, safe)
 // ─────────────────────────────────────────────────────────────────────────────
 import {
   TABLE,
@@ -32,6 +36,7 @@ export interface Vec3 {
 }
 
 export type Phase = 'serve' | 'rally' | 'point' | 'over'
+export type HitQuality = 'perfect' | 'good' | 'weak' | 'block' | 'soft'
 
 export interface FXEvent {
   kind: 'spark' | 'ring'
@@ -46,11 +51,15 @@ interface Paddle {
   x: number
   tx: number
   vx: number
-  spinVx: number // low-passed vx used for imparting sidespin
+  spinVx: number
   cool: number
   charging: boolean
   charge: number
-  maxSpeed: number // lateral speed limit (Infinity for human-driven paddles)
+  pressedThisShot: boolean
+  hasReleased: boolean
+  releaseT: number
+  swingAnim: number // 1 → 0 after a hit, drives follow-through
+  maxSpeed: number // lateral speed limit (Infinity for human paddles)
 }
 
 interface Target {
@@ -58,12 +67,31 @@ interface Target {
   z: number
   r: number
   alive: boolean
-  pop: number // pop-in animation timer
+  pop: number
 }
 
+const PERFECT_WINDOW = 0.1
+const GOOD_WINDOW = 0.26
 const FLOW_DURATION = 3.5
-const POINT_DELAY = 1.6
+const POINT_DELAY = 1.25
 const WIN_DELAY = 2.6
+
+function freshPaddle(): Paddle {
+  return {
+    x: 0,
+    tx: 0,
+    vx: 0,
+    spinVx: 0,
+    cool: 0,
+    charging: false,
+    charge: 0,
+    pressedThisShot: false,
+    hasReleased: false,
+    releaseT: -10,
+    swingAnim: 0,
+    maxSpeed: Infinity,
+  }
+}
 
 export class Engine {
   mode: Mode = 'demo'
@@ -73,15 +101,16 @@ export class Engine {
   ball = {
     pos: { x: 0, y: TABLE.H + 0.6, z: 2.5 } as Vec3,
     vel: { x: 0, y: 0, z: 0 } as Vec3,
-    curveH: 0, // horizontal bend accel (sidespin)
-    curveV: 0, // extra vertical accel (topspin dip when negative)
+    curveH: 0,
+    curveV: 0,
     active: false,
     visible: true,
-    heat: 0, // 0..1, visual energy from speed
+    heat: 0,
+    squash: 0, // bounce squash timer
   }
 
-  player: Paddle = { x: 0, tx: 0, vx: 0, spinVx: 0, cool: 0, charging: false, charge: 0, maxSpeed: Infinity }
-  ai: Paddle = { x: 0, tx: 0, vx: 0, spinVx: 0, cool: 0, charging: false, charge: 0, maxSpeed: Infinity }
+  player: Paddle = freshPaddle()
+  ai: Paddle = freshPaddle()
 
   tier: TierDef = { ...TIERS[1] }
   aiName = 'VECTOR'
@@ -91,11 +120,19 @@ export class Engine {
   rally = 0
   lastHitter: Side | null = null
   landedTargetSide = false
-  shotId = 0 // incremented per hit; AI re-plans on change
+  shotId = 0
 
   flow = 0
   flowUntil = -1
   private flowOn = false
+
+  momentum = 0 // -1 (AI dominating) .. +1 (player dominating)
+  perfectCombo = 0
+  lastQuality: HitQuality = 'soft'
+  hitPulse = 0 // 1 on every hit, decays — drives crowd/lights
+
+  aiWillSmash = false // decided at reaction time → telegraphed
+  aiSmashFlash = 0
 
   trick = {
     targets: [] as Target[],
@@ -104,7 +141,6 @@ export class Engine {
     combo: 1,
   }
 
-  // timing
   private acc = 0
   private simTime = 0
   private pointTimer = 0
@@ -112,26 +148,28 @@ export class Engine {
   private aiPlanT = 0
   private aiErr = 0
   private aiPlannedShot = -1
-  private aiRecoverT = 0 // sluggish after smashing — the moment to counter
+  private aiRecoverT = 0
   private demoShot = -1
   private demoErrA = 0
   private demoErrP = 0
   private stillT = 0
   private trickTimePushed = -1
+  private lastChargePushed = -1
   private lastMpShown: Side | null = null
 
-  // juice
   fx: FXEvent[] = []
   shake = 0
+  fovPunch = 0
   slowmoT = 0
+  slowmoScale = 0.28
   hitStopT = 0
   cinematic = false
 
-  // duel keyboard state
   p1Key = 0
   p2Key = 0
 
   private pendingServe: Side = 'player'
+  private pendingGameOver: { winner: Side } | null = null
 
   // ── setup ────────────────────────────────────────────────────────────────
   startDemo() {
@@ -201,23 +239,24 @@ export class Engine {
     this.rally = 0
     this.flow = 0
     this.flowUntil = -1
+    this.momentum = 0
+    this.perfectCombo = 0
     this.setFlowActive(false)
     this.lastHitter = null
-    this.player.x = 0
-    this.player.tx = 0
-    this.player.charge = 0
-    this.player.charging = false
-    this.ai.x = 0
-    this.ai.tx = 0
+    this.player = freshPaddle()
+    this.ai = freshPaddle()
     this.lastMpShown = null
     this.cinematic = false
     this.slowmoT = 0
     this.hitStopT = 0
+    this.pendingGameOver = null
     const s = useStore.getState()
     s.setRally(0)
     s.setFlow(0, false)
     s.setCharge(0)
     s.setMatchPoint(null)
+    s.setMomentum(0)
+    s.setPerfectCombo(0)
   }
 
   // ── input API ─────────────────────────────────────────────────────────────
@@ -228,32 +267,29 @@ export class Engine {
 
   moveKey(side: Side, dir: number, dt: number) {
     const p = side === 'player' ? this.player : this.ai
-    p.tx = clamp(p.tx + dir * 7.2 * dt, -(HALF_W + 0.7), HALF_W + 0.7)
+    p.tx = clamp(p.tx + dir * 7.6 * dt, -(HALF_W + 0.7), HALF_W + 0.7)
   }
 
-  setCharging(side: Side, on: boolean) {
-    const p = side === 'player' ? this.player : this.ai
-    p.charging = on
-    if (!on) p.charge = 0
-  }
-
-  /** Press-to-serve / press-to-charge unified action. */
+  /** Press: serve if it's your serve, otherwise start charging. */
   action(side: Side) {
     if (this.mode === 'demo') return
     if (this.phase === 'serve' && this.server === side) {
       this.doServe(side)
-    } else {
-      const p = side === 'player' ? this.player : this.ai
-      p.charging = true
+      return
     }
+    const p = side === 'player' ? this.player : this.ai
+    p.charging = true
+    p.pressedThisShot = true
+    p.hasReleased = false
   }
 
+  /** Release: commit the swing timing. Charge freezes until contact. */
   releaseAction(side: Side) {
     const p = side === 'player' ? this.player : this.ai
-    // only drop charge if the shot hasn't fired yet this press
     if (p.charging) {
       p.charging = false
-      p.charge = 0
+      p.hasReleased = true
+      p.releaseT = this.simTime
     }
   }
 
@@ -266,51 +302,59 @@ export class Engine {
   // ── main loop ─────────────────────────────────────────────────────────────
   update(dtReal: number) {
     if (this.paused) return
-    // slow-mo / hit-stop time scaling
     this.slowmoT = Math.max(0, this.slowmoT - dtReal)
     this.hitStopT = Math.max(0, this.hitStopT - dtReal)
     let ts = 1
-    if (this.slowmoT > 0) ts = 0.28
+    if (this.slowmoT > 0) ts = this.slowmoScale
     else if (this.hitStopT > 0) ts = 0.12
-    this.cinematic = this.slowmoT > 0
+    this.cinematic = this.slowmoT > 0 && this.slowmoScale < 0.3
 
     this.acc += Math.min(dtReal, 0.1) * ts
     while (this.acc >= STEP) {
       this.stepSim(STEP)
       this.acc -= STEP
     }
-    this.shake = Math.max(0, this.shake - dtReal * 2.2)
+    this.shake = Math.max(0, this.shake - dtReal * 2.4)
+    this.fovPunch = Math.max(0, this.fovPunch - dtReal * 3.2)
+    this.hitPulse = Math.max(0, this.hitPulse - dtReal * 2.6)
+    this.aiSmashFlash = Math.max(0, this.aiSmashFlash - dtReal * 2)
+    this.ball.squash = Math.max(0, this.ball.squash - dtReal * 7)
   }
 
   private stepSim(dt: number) {
     this.simTime += dt
+    this.momentum *= 1 - dt * 0.05
 
-    // paddles
     if (this.p1Key !== 0 && this.mode !== 'demo') this.moveKey('player', this.p1Key, dt)
     if (this.p2Key !== 0 && this.mode === 'duel') this.moveKey('ai', this.p2Key, dt)
     this.updatePaddle(this.player, dt)
     this.updatePaddle(this.ai, dt)
+
     if (this.mode === 'demo') {
       this.updateAI(dt)
     } else if (this.mode === 'duel') {
-      // no AI in duel
+      // both paddles human
     } else if (this.mode !== 'trick') {
       this.updateAI(dt)
     }
 
-    // charging
-    if (this.player.charging && this.mode !== 'duel') {
-      this.player.charge = Math.min(1, this.player.charge + dt / 0.85)
+    // charge build-up while holding
+    for (const p of [this.player, this.ai]) {
+      if (p.charging) p.charge = Math.min(1, p.charge + dt / 0.8)
+      // fizzle a released swing that never connected
+      if (p.hasReleased && !p.charging && this.simTime - p.releaseT > 0.7) {
+        p.charge = 0
+        p.hasReleased = false
+        p.pressedThisShot = false
+      }
     }
-    if (this.mode === 'duel') {
-      if (this.player.charging) this.player.charge = Math.min(1, this.player.charge + dt / 0.85)
-      if (this.ai.charging) this.ai.charge = Math.min(1, this.ai.charge + dt / 0.85)
+    const chargeRounded = Math.round(this.player.charge * 40) / 40
+    if (chargeRounded !== this.lastChargePushed) {
+      this.lastChargePushed = chargeRounded
+      useStore.getState().setCharge(chargeRounded)
     }
 
-    // flow state expiry
-    if (this.flowOn && this.simTime > this.flowUntil) {
-      this.setFlowActive(false)
-    }
+    if (this.flowOn && this.simTime > this.flowUntil) this.setFlowActive(false)
 
     if (this.phase === 'serve') {
       this.stepServe(dt)
@@ -333,24 +377,24 @@ export class Engine {
       if (this.pointTimer <= 0) this.afterPoint()
     }
 
-    // rally-based music intensity
     if (this.mode !== 'demo') {
-      setMusicIntensity(this.rally >= 8 ? 2 : this.rally >= 3 ? 1 : 0)
+      const heat = this.rally >= 8 ? 2 : this.rally >= 3 ? 1 : 0
+      setMusicIntensity(Math.max(heat, Math.abs(this.momentum) > 0.6 ? 1 : 0))
     }
   }
 
   private updatePaddle(p: Paddle, dt: number) {
     const prev = p.x
-    const k = 1 - Math.exp(-dt * 20)
+    const k = 1 - Math.exp(-dt * 30)
     let dx = (p.tx - p.x) * k
     const maxStep = p.maxSpeed * dt
     if (Math.abs(dx) > maxStep) dx = Math.sign(dx) * maxStep
     p.x += dx
     p.vx = (p.x - prev) / dt
-    // smooth velocity for spin so input jitter doesn't wildly bend shots
     const sk = 1 - Math.exp(-dt * 9)
     p.spinVx += (p.vx - p.spinVx) * sk
     p.cool = Math.max(0, p.cool - dt)
+    p.swingAnim = Math.max(0, p.swingAnim - dt * 4)
   }
 
   // ── serve ─────────────────────────────────────────────────────────────────
@@ -363,24 +407,32 @@ export class Engine {
     this.lastHitter = null
     this.landedTargetSide = false
     this.rally = 0
+    this.aiWillSmash = false
+    this.resetPresses()
     useStore.getState().setRally(0)
-    this.serveTimer = this.server === 'ai' || this.mode === 'demo' ? rand(0.9, 1.5) : -1
+    this.serveTimer = this.server === 'ai' || this.mode === 'demo' ? rand(0.7, 1.2) : -1
     this.pendingServe = this.server
 
-    // match point callout
     const mp = this.matchPointSide()
     const st = useStore.getState()
     st.setMatchPoint(mp)
     st.setServer(this.server)
     if (mp && mp !== this.lastMpShown) {
       this.lastMpShown = mp
-      const who = this.sideName(mp)
-      st.showBanner('MATCH POINT', 'epic', `${who} needs the next point`)
+      st.showBanner('MATCH POINT', 'epic', `${this.sideName(mp)} needs the next point`)
+    }
+  }
+
+  private resetPresses() {
+    for (const p of [this.player, this.ai]) {
+      p.pressedThisShot = false
+      p.hasReleased = false
+      p.charging = false
+      p.charge = 0
     }
   }
 
   private stepServe(dt: number) {
-    // ball hovers at the server's paddle
     const srv = this.pendingServe
     const pad = srv === 'player' ? this.player : this.ai
     const z = srv === 'player' ? PLAYER_Z - 0.35 : AI_Z + 0.35
@@ -405,6 +457,7 @@ export class Engine {
     this.landedTargetSide = false
     this.shotId++
     this.rally = 0
+    this.resetPresses()
 
     const depth = rand(2.3, 3.2)
     let targetX: number
@@ -414,24 +467,24 @@ export class Engine {
     if (side === 'player') {
       targetX = clamp(pad.tx * 0.62, -1.95, 1.95)
       targetZ = -depth
-      speed = rand(8.2, 9.2)
+      speed = rand(8.6, 9.6)
     } else {
       targetX = this.mode === 'duel' ? rand(-1.8, 1.8) : rand(-1.7, 1.7)
       targetZ = depth
-      speed = rand(7.6, 8.8)
+      speed = rand(8.0, 9.2)
     }
 
-    const v = this.solveShot(b.pos, targetX, targetZ, speed, 0)
-    b.vel = v
-    b.curveH = clamp(pad.vx * 0.5, -2, 2)
+    b.vel = this.solveShot(b.pos, targetX, targetZ, speed, 0)
+    b.curveH = clamp(pad.spinVx * 0.4, -2, 2)
     b.curveV = -1.2
 
     pad.cool = 0.3
+    pad.swingAnim = 1
     this.emitFX(b.pos, side === 'player' ? '#67e8f9' : this.tier.color, 8, 3)
-    this.bumpShake(0.12)
+    this.bumpShake(0.1)
     if (this.mode !== 'demo') sfx.serve()
-    // AI plans for the incoming serve
     this.aiPlannedShot = -1
+    this.aiWillSmash = false
   }
 
   // ── ball physics ──────────────────────────────────────────────────────────
@@ -442,10 +495,8 @@ export class Engine {
     const prevZ = b.pos.z
     const prevY = b.pos.y
 
-    // forces
     b.vel.y += (GRAV + b.curveV) * dt
     b.vel.x += b.curveH * dt
-    // light air drag
     const drag = 1 - 0.1 * dt
     b.vel.x *= drag
     b.vel.z *= drag
@@ -456,18 +507,17 @@ export class Engine {
 
     b.heat = clamp((Math.hypot(b.vel.x, b.vel.y, b.vel.z) - 7) / 9, 0, 1)
 
-    // ── net collision ──
+    // net
     if (prevZ !== b.pos.z && Math.sign(prevZ) !== Math.sign(b.pos.z)) {
       const t = Math.abs(prevZ) / (Math.abs(prevZ) + Math.abs(b.pos.z))
       const yAt = prevY + (b.pos.y - prevY) * t
-      const xAt = b.pos.x
-      if (yAt < NET_H + BALL_R * 0.8 && Math.abs(xAt) < HALF_W + 0.3) {
+      if (yAt < NET_H + BALL_R * 0.8 && Math.abs(b.pos.x) < HALF_W + 0.3) {
         this.onNet()
         return
       }
     }
 
-    // ── table bounce ──
+    // table bounce
     if (
       b.vel.y < 0 &&
       b.pos.y - BALL_R <= TABLE.H &&
@@ -481,10 +531,11 @@ export class Engine {
       b.vel.z *= 0.95
       b.curveH *= 0.65
       b.curveV *= 0.4
+      b.squash = 1
       this.onBounce()
     }
 
-    // ── paddle hits ──
+    // paddle planes
     if (b.vel.z > 0 && prevZ < PLAYER_Z - 0.26 && b.pos.z >= PLAYER_Z - 0.26) {
       this.tryHit('player')
     }
@@ -493,7 +544,7 @@ export class Engine {
       else this.tryHit('ai')
     }
 
-    // ── stillness safety ──
+    // stillness safety
     const spd = Math.hypot(b.vel.x, b.vel.y, b.vel.z)
     if (spd < 0.6 && b.pos.y < TABLE.H + 0.3) this.stillT += dt
     else this.stillT = 0
@@ -502,15 +553,10 @@ export class Engine {
       return
     }
 
-    // ── out of bounds → dead ──
-    if (
-      b.pos.y - BALL_R <= 0.01 ||
-      Math.abs(b.pos.z) > HALF_L + 3.2 ||
-      Math.abs(b.pos.x) > HALF_W + 4
-    ) {
+    // out of bounds
+    if (b.pos.y - BALL_R <= 0.01 || Math.abs(b.pos.z) > HALF_L + 3.2 || Math.abs(b.pos.x) > HALF_W + 4) {
       if (b.pos.y - BALL_R <= 0.01) {
         b.pos.y = BALL_R
-        // one floor bounce then die
         if (b.vel.y < 0) b.vel.y = -b.vel.y * 0.4
         if (Math.abs(b.vel.y) < 1.2) {
           this.resolveDead()
@@ -530,16 +576,13 @@ export class Engine {
     this.pushRing({ x: b.pos.x, y: TABLE.H + 0.03, z: b.pos.z }, color)
     if (this.mode !== 'demo') sfx.tableBounce()
 
-    if (this.mode === 'trick' && side === 'ai') {
-      this.checkTargets()
-    }
+    if (this.mode === 'trick' && side === 'ai') this.checkTargets()
 
     if (this.lastHitter && !this.landedTargetSide) {
       const opponentSide: Side = this.lastHitter === 'player' ? 'ai' : 'player'
       if (side === opponentSide) {
-        this.landedTargetSide = true // good, legal bounce
+        this.landedTargetSide = true
       } else {
-        // bounced on own side first → fault
         this.awardPoint(opponentSide, 'FAULT')
       }
     }
@@ -547,10 +590,9 @@ export class Engine {
 
   private onNet() {
     const b = this.ball
-    this.emitFX({ x: b.pos.x, y: NET_H * 0.7 + TABLE.H * 0, z: 0 }, '#ff5470', 14, 3.4)
+    this.emitFX({ x: b.pos.x, y: NET_H * 0.7, z: 0 }, '#ff5470', 14, 3.4)
     if (this.mode !== 'demo') sfx.net()
     this.bumpShake(0.25)
-    const winner: Side = this.lastHitter === 'player' ? 'ai' : 'player'
     if (this.mode === 'demo') {
       this.silentRestart()
       return
@@ -559,6 +601,7 @@ export class Engine {
       this.endRallyTrick()
       return
     }
+    const winner: Side = this.lastHitter === 'player' ? 'ai' : 'player'
     this.awardPoint(winner, 'NET!')
   }
 
@@ -576,135 +619,232 @@ export class Engine {
       return
     }
     if (this.landedTargetSide) {
-      // legal shot, opponent failed to return
       this.awardPoint(this.lastHitter, this.lastHitter === 'player' ? 'WINNER!' : '')
     } else {
-      // hitter's shot never landed on the opponent side
       this.awardPoint(this.lastHitter === 'player' ? 'ai' : 'player', 'OUT!')
     }
   }
 
   // ── paddle contact ────────────────────────────────────────────────────────
+  private judgeQuality(p: Paddle): { quality: HitQuality; diff: number } {
+    if (!p.pressedThisShot) return { quality: 'soft', diff: Infinity }
+    if (!p.hasReleased) return { quality: 'block', diff: Infinity }
+    const diff = this.simTime - p.releaseT
+    if (diff >= 0 && diff <= PERFECT_WINDOW) return { quality: 'perfect', diff }
+    if (diff <= GOOD_WINDOW) return { quality: 'good', diff }
+    return { quality: 'weak', diff }
+  }
+
   private tryHit(side: Side) {
     const b = this.ball
     const pad = side === 'player' ? this.player : this.ai
     if (pad.cool > 0) return
 
     const human = side === 'player' || this.mode === 'duel'
-    let reach = PADDLE_REACH
-    let errX = 0
-    if (!human) {
-      // AI reach can be fooled by flow state
-      if (this.flowOn) reach *= 0.78
+    const incomingSpeed = Math.hypot(b.vel.x, b.vel.y, b.vel.z)
+
+    if (human) {
+      const { quality, diff } = this.judgeQuality(pad)
+      // PERFECT timing lunges the paddle further
+      const reach = PADDLE_REACH * (quality === 'perfect' ? 1.5 : 1)
+      const dx = b.pos.x - pad.x
+      if (Math.abs(dx) > reach || b.pos.y > PADDLE_TOP || b.pos.y < TABLE.H - 0.4) return
+      this.humanStrike(side, quality, dx, incomingSpeed)
+    } else {
+      if (this.flowOn) {
+        if (Math.abs(b.pos.x - pad.x) > PADDLE_REACH * 0.78) return
+      } else if (Math.abs(b.pos.x - pad.x) > PADDLE_REACH) return
+      if (b.pos.y > PADDLE_TOP || b.pos.y < TABLE.H - 0.4) return
+      this.aiStrike(incomingSpeed)
     }
 
-    const dx = b.pos.x - pad.x
-    if (Math.abs(dx) > reach || b.pos.y > PADDLE_TOP || b.pos.y < TABLE.H - 0.4) return
-
-    // ── contact! ──
     pad.cool = 0.24
+    pad.swingAnim = 1
+    pad.charging = false
+    pad.charge = 0
+    pad.pressedThisShot = false
+    pad.hasReleased = false
     this.shotId++
     this.lastHitter = side
     this.landedTargetSide = false
     this.rally++
+    this.hitPulse = 1
     useStore.getState().setRally(this.rally)
-
-    const power = pad.charge
-    pad.charge = 0
-    pad.charging = false
-
-    let speed: number
-    let targetX: number
-    let targetZ: number
-    let curveV: number
-
-    if (human) {
-      speed = 8.6 + power * 6.2 + Math.min(this.rally, 10) * 0.08
-      const off = clamp(dx / PADDLE_REACH, -1, 1)
-      const oppPad = side === 'player' ? this.ai : this.player
-      targetX = clamp(off * 2.0 - oppPad.x * 0.42, -2.05, 2.05)
-      targetZ = side === 'player' ? -(2.3 + power * 1.15 + rand(0, 0.5)) : 2.3 + power * 1.15 + rand(0, 0.5)
-      curveV = -(1.4 + power * 5.4)
-    } else {
-      // AI shot planning
-      const smash = Math.random() < this.tier.smashChance && this.rally >= 2
-      speed = this.tier.returnSpeed + pad.charge * 2.2 + rand(-0.5, 1.4) + (smash ? 2.6 : 0)
-      if (this.flowOn) speed *= 0.82
-      const away = this.player.x >= 0 ? -1 : 1
-      targetX = clamp(
-        away * rand(this.tier.aimMin, this.tier.aimMax) + rand(-this.tier.error, this.tier.error) * 2,
-        -2.05,
-        2.05
-      )
-      targetZ = Math.min(4.0, 2.2 + rand(0, 1.3) + (smash ? 0.8 : 0))
-      curveV = -(1.2 + (smash ? 4.5 : rand(0, 1.5)))
-      if (smash) {
-        // smashes leave the machine recovering — and sometimes overhit
-        this.aiRecoverT = 0.55
-        if (this.mode !== 'demo' && Math.random() < 0.2) {
-          targetZ = rand(4.45, 5.1) // sails long → fault
-        }
-        if (this.mode !== 'demo') {
-          useStore.getState().showBanner(`${this.aiName} SMASHES`, 'bad')
-          sfx.smash()
-          this.bumpShake(0.4)
-        }
-      }
+    // opponent must re-press for the next shot — unless already holding a charge
+    const opp = side === 'player' ? this.ai : this.player
+    if (!opp.charging) {
+      opp.pressedThisShot = false
+      opp.hasReleased = false
     }
+  }
 
-    const v = this.solveShot(b.pos, targetX, targetZ, speed, curveV)
-    b.vel = v
-    b.curveH = human ? clamp(pad.spinVx * 0.82, -2.9, 2.9) : clamp(pad.spinVx * 0.32, -2.2, 2.2)
+  private humanStrike(side: Side, quality: HitQuality, dx: number, incomingSpeed: number) {
+    const b = this.ball
+    const pad = side === 'player' ? this.player : this.ai
+    const oppPad = side === 'player' ? this.ai : this.player
+
+    let power: number
+    let speedMult = 1
+    let spray = 0
+    let targetZ: number
+
+    switch (quality) {
+      case 'perfect':
+        power = 0.85 + pad.charge * 0.6
+        speedMult = 1.16
+        targetZ = 2.2 + power * 1.6
+        break
+      case 'good':
+        power = 0.6 + pad.charge * 0.65
+        targetZ = 2.1 + power * 1.5
+        break
+      case 'block':
+        power = 0.5 + pad.charge * 0.35
+        targetZ = 2.0 + power * 1.2
+        spray = 0.25
+        break
+      case 'weak':
+        power = 0.5
+        speedMult = 0.82
+        spray = 0.8
+        targetZ = 2.0
+        break
+      default:
+        // soft — safe little reset shot
+        power = 0.42
+        speedMult = 0.8
+        spray = 0
+        targetZ = 1.5
+    }
+    power = Math.min(1.45, power)
+
+    const off = clamp(dx / PADDLE_REACH, -1, 1)
+    let targetX = clamp(off * 2.4 - oppPad.x * 0.35, -2.08, 2.08)
+    if (quality === 'soft') targetX = clamp(targetX * 0.5, -1.0, 1.0)
+    targetX = clamp(targetX + rand(-spray, spray), -2.1, 2.1)
+    const dirSign = side === 'player' ? -1 : 1
+    targetZ = dirSign * Math.min(3.95, targetZ + rand(0, 0.35))
+
+    const speed = Math.min(17.5, (8.4 + power * 7.0 + Math.min(this.rally, 10) * 0.08) * speedMult)
+    const curveV = -(1.3 + power * 5.0)
+
+    b.vel = this.solveShot(b.pos, targetX, targetZ, speed, curveV)
+    b.curveH = clamp(pad.spinVx * 0.85, -3.0, 3.0)
     b.curveV = curveV
 
-    // juice
-    const smash = human && power > 0.7
-    const color = side === 'player' ? '#67e8f9' : this.tier.color
-    this.emitFX({ ...b.pos }, smash ? '#ffd166' : color, smash ? 22 : 10, smash ? 6 : 3.4)
-    if (smash) {
+    // ── juice by quality ──
+    const skinColor = side === 'player' ? '#67e8f9' : '#f0abfc'
+    if (quality === 'perfect') {
+      this.perfectCombo++
+      useStore.getState().setPerfectCombo(this.perfectCombo)
+      this.emitFX({ ...b.pos }, '#ffd166', 26, 6.5, true)
       this.pushRing({ ...b.pos }, '#ffd166')
-      sfx.smash()
-      this.bumpShake(0.55)
-      this.hitStopT = 0.09
-      useStore.getState().showBanner('SMASH!', 'epic')
-    } else if (this.mode !== 'demo') {
-      sfx.paddleHit(0.25 + power * 0.75)
-      this.bumpShake(0.08 + power * 0.18)
+      sfx.perfect(this.perfectCombo)
+      this.slowmoScale = 0.38
+      this.slowmoT = Math.max(this.slowmoT, 0.24)
+      this.bumpShake(0.42)
+      this.fovPunch = 1
+      const st = useStore.getState()
+      st.showBanner(this.perfectCombo > 1 ? `PERFECT ×${this.perfectCombo}` : 'PERFECT', 'epic')
+      st.flashScreen('gold')
+    } else if (quality === 'good' || quality === 'block') {
+      const smash = pad.charge > 0.7 || power > 1.05
+      this.emitFX({ ...b.pos }, smash ? '#ffd166' : skinColor, smash ? 20 : 10, smash ? 5.5 : 3.4)
+      if (smash) {
+        this.pushRing({ ...b.pos }, '#ffd166')
+        sfx.smash()
+        this.bumpShake(0.5)
+        this.hitStopT = 0.08
+        this.fovPunch = 0.8
+        useStore.getState().showBanner('SMASH!', 'epic')
+        useStore.getState().flashScreen('white')
+      } else {
+        sfx.paddleHit(0.3 + power * 0.6)
+        this.bumpShake(0.1 + power * 0.16)
+      }
+      if (quality === 'block') this.perfectCombo = 0
+    } else if (quality === 'weak') {
+      this.emitFX({ ...b.pos }, '#64748b', 6, 2)
+      sfx.paddleHit(0.15)
+      this.bumpShake(0.05)
+      this.perfectCombo = 0
+    } else {
+      this.emitFX({ ...b.pos }, skinColor, 5, 1.8)
+      sfx.paddleHit(0.1)
     }
+    this.lastQuality = quality
 
-    // flow meter (single-player vs AI only)
+    // flow meter (single-player vs AI)
     if (side === 'player' && (this.mode === 'quick' || this.mode === 'gauntlet')) {
-      this.flow = Math.min(1, this.flow + 0.15)
+      const gain = quality === 'perfect' ? 0.22 : quality === 'good' ? 0.15 : quality === 'block' ? 0.1 : 0.05
+      this.flow = Math.min(1, this.flow + gain)
       if (this.flow >= 1 && !this.flowOn) {
         this.setFlowActive(true)
         this.flowUntil = this.simTime + FLOW_DURATION
         this.flow = 0
         sfx.flow()
-        useStore.getState().showBanner('FLOW STATE', 'epic', 'the world slows down')
+        useStore.getState().showBanner('FLOW STATE', 'epic', 'the machine slows')
+        useStore.getState().flashScreen('cyan')
       }
       useStore.getState().setFlow(this.flow, this.flowOn)
     }
   }
 
-  /** Trick-mode wall: always returns, keeps the rally alive. */
+  private aiStrike(incomingSpeed: number) {
+    const b = this.ball
+    const pad = this.ai
+    const smash = this.aiWillSmash
+    let speed = this.tier.returnSpeed + pad.charge * 2.2 + rand(-0.5, 1.2) + (smash ? 2.6 : 0)
+    if (this.flowOn) speed *= 0.82
+    const away = this.player.x >= 0 ? -1 : 1
+    // soft feeds get stretched to the extremes — passive play is punished
+    const softFeed = incomingSpeed < 9.8
+    const aimLo = softFeed ? Math.max(this.tier.aimMin, 1.35) : this.tier.aimMin
+    const aimHi = softFeed ? 2.05 : this.tier.aimMax
+    let targetX = clamp(
+      away * rand(aimLo, aimHi) + rand(-this.tier.error, this.tier.error) * 2,
+      -2.05,
+      2.05
+    )
+    let targetZ = Math.min(4.0, 2.2 + rand(0, 1.3) + (smash ? 0.8 : 0))
+    const curveV = -(1.2 + (smash ? 4.5 : rand(0, 1.5)))
+    if (smash) {
+      this.aiRecoverT = 0.55
+      if (this.mode !== 'demo' && Math.random() < 0.15) targetZ = rand(4.45, 5.1)
+      if (this.mode !== 'demo') {
+        useStore.getState().showBanner(`${this.aiName} SMASHES`, 'bad')
+        sfx.smash()
+        this.bumpShake(0.4)
+      }
+    }
+
+    b.vel = this.solveShot(b.pos, targetX, targetZ, speed, curveV)
+    b.curveH = clamp(pad.spinVx * 0.32, -2.2, 2.2)
+    b.curveV = curveV
+    this.aiWillSmash = false
+    this.emitFX({ ...b.pos }, smash ? '#ff5470' : this.tier.color, smash ? 18 : 8, smash ? 5 : 3)
+    if (!smash && this.mode !== 'demo') sfx.wallHit(0.4 + speed / 30)
+  }
+
+  /** Trick-mode wall: always returns. */
   private wallReturn() {
     const b = this.ball
     this.shotId++
     this.lastHitter = 'ai'
     this.landedTargetSide = false
     this.rally++
+    this.hitPulse = 1
     useStore.getState().setRally(this.rally)
 
     const targetX = clamp(this.player.x * 0.5 + rand(-1.4, 1.4), -2.0, 2.0)
     const targetZ = 2.2 + rand(0, 1.2)
-    const speed = rand(7.2, 9.4)
-    b.vel = this.solveShot(b.pos, targetX, targetZ, speed, -1.6)
+    b.vel = this.solveShot(b.pos, targetX, targetZ, rand(7.4, 9.6), -1.6)
     b.curveH = rand(-1.5, 1.5)
     b.curveV = -1.6
     this.ai.cool = 0.3
-
+    this.ai.swingAnim = 1
     this.emitFX({ ...b.pos }, '#f0abfc', 8, 3)
-    if (this.mode !== 'demo') sfx.wallHit(0.5)
+    sfx.wallHit(0.5)
     this.bumpShake(0.08)
   }
 
@@ -718,7 +858,6 @@ export class Engine {
     const errMul = this.flowOn ? 2.6 : 1
 
     if (this.mode === 'demo') {
-      // both paddles AI-driven for the menu backdrop demo rally
       if (this.demoShot !== this.shotId) {
         this.demoShot = this.shotId
         this.demoErrA = rand(-1.15, 1.15)
@@ -727,9 +866,7 @@ export class Engine {
       desired = this.predictFor(-1) + this.demoErrA
       this.moveToward(a, desired, this.tier.speed)
       const p = this.player
-      const dP = this.predictFor(1) + this.demoErrP
-      this.moveToward(p, dP, this.tier.speed)
-      // occasional dramatic charges
+      this.moveToward(p, this.predictFor(1) + this.demoErrP, this.tier.speed)
       if (this.ball.active) {
         if (this.ball.vel.z < 0) {
           if (!a.charging && Math.random() < 0.004) a.charging = true
@@ -748,17 +885,24 @@ export class Engine {
         this.aiPlanT += dt
         if (this.aiPlanT >= this.tier.reaction) {
           this.aiPlannedShot = this.shotId
-          // fast balls are harder to read — smashes stretch every machine
           const ballSpeed = Math.hypot(this.ball.vel.x, this.ball.vel.y, this.ball.vel.z)
           const speedErr = 1 + Math.max(0, ballSpeed - 9.5) * 0.14
           this.aiErr = rand(-1, 1) * this.tier.error * errMul * speedErr
           this.aiPlanT = 0
+          // decide smash now → telegraph it
+          let smashChance = this.tier.smashChance
+          if (ballSpeed < 9.5) smashChance += this.tier.smashChance >= 0.1 ? 0.3 : 0.1 // punish soft feeds
+          this.aiWillSmash = this.rally >= 1 && Math.random() < smashChance
+          if (this.aiWillSmash) {
+            this.aiSmashFlash = 1
+            sfx.chargeUp()
+          }
         }
       }
       if (this.aiPlannedShot === this.shotId) {
         desired = this.predictFor(-1) + this.aiErr
       } else {
-        desired = a.x // hold until reacted
+        desired = a.x
       }
     } else if (this.phase === 'serve' && this.server === 'ai') {
       desired = rand(-0.5, 0.5)
@@ -768,17 +912,15 @@ export class Engine {
 
     this.moveToward(a, desired, this.tier.speed * speedMul)
 
-    // AI charges up for smashes vs incoming ball
-    if (this.phase === 'rally' && this.ball.vel.z < 0 && this.tier.smashChance > 0.1) {
+    if (this.phase === 'rally' && this.ball.vel.z < 0 && this.aiWillSmash) {
       a.charging = true
+      a.charge = Math.min(1, a.charge + dt / 0.5)
     } else {
       a.charging = false
       a.charge = 0
     }
-    if (a.charging) a.charge = Math.min(1, a.charge + dt / 0.7)
   }
 
-  /** Predict ball x at the given side's paddle plane. dir: -1 → AI plane, +1 → player plane. */
   private predictFor(dir: -1 | 1): number {
     const b = this.ball
     if (!b.active) return 0
@@ -786,7 +928,6 @@ export class Engine {
     if ((dir === -1 && b.vel.z >= 0) || (dir === 1 && b.vel.z <= 0)) return 0
     const t = (planeZ - b.pos.z) / b.vel.z
     if (t < 0) return 0
-    // imperfect spin reading: curved shots fool weaker machines
     const x = b.pos.x + b.vel.x * t + 0.5 * b.curveH * this.tier.curveRead * t * t
     return clamp(x, -(HALF_W + 0.6), HALF_W + 0.6)
   }
@@ -794,6 +935,41 @@ export class Engine {
   private moveToward(p: Paddle, target: number, speed: number) {
     p.maxSpeed = speed
     p.tx = clamp(target, -(HALF_W + 0.7), HALF_W + 0.7)
+  }
+
+  // ── aim preview (reticle) ─────────────────────────────────────────────────
+  /** Where the current approach would send the ball — for the aim reticle. */
+  getAimPreview(): { x: number; z: number; quality: 'gold' | 'normal' | 'dim' } | null {
+    if (this.phase !== 'rally' || !this.ball.active || this.ball.vel.z <= 0) return null
+    if (this.lastHitter === 'player') return null
+    const planeZ = PLAYER_Z - 0.26
+    const t = (planeZ - this.ball.pos.z) / this.ball.vel.z
+    if (t < 0 || t > 2) return null
+    const px = this.ball.pos.x + this.ball.vel.x * t + 0.5 * this.ball.curveH * t * t
+    const dx = px - this.player.x
+    if (Math.abs(dx) > PADDLE_REACH * 1.5) return { x: 0, z: -2, quality: 'dim' }
+    const { quality } = this.judgeQuality(this.player)
+    const off = clamp(dx / PADDLE_REACH, -1, 1)
+    const power = 0.5 + this.player.charge * 0.7
+    let targetX = clamp(off * 2.4 - this.ai.x * 0.35, -2.08, 2.08)
+    if (!this.player.pressedThisShot) targetX *= 0.5
+    const targetZ = -(Math.min(3.95, (this.player.pressedThisShot ? 2.1 : 1.5) + power * 1.5))
+    void quality
+    return { x: targetX, z: targetZ, quality: this.player.charge >= 1 ? 'gold' : 'normal' }
+  }
+
+  /** Seconds until the ball reaches the player plane (for the timing ring). */
+  timeToPlayerPlane(): number | null {
+    if (!this.ball.active || this.ball.vel.z <= 0 || this.lastHitter === 'player') return null
+    const t = (PLAYER_Z - 0.26 - this.ball.pos.z) / this.ball.vel.z
+    return t > 0 && t < 2 ? t : null
+  }
+
+  predictedPlayerContactX(): number {
+    const b = this.ball
+    const t = this.timeToPlayerPlane()
+    if (t === null) return this.player.x
+    return b.pos.x + b.vel.x * t + 0.5 * b.curveH * t * t
   }
 
   // ── scoring ───────────────────────────────────────────────────────────────
@@ -815,21 +991,27 @@ export class Engine {
     this.ball.active = false
     this.ball.visible = false
     this.pointTimer = POINT_DELAY
-    this.server = winner // winner serves next (momentum rule)
+    this.server = winner
 
     if (winner === 'player') this.score.p++
     else this.score.a++
 
+    this.momentum = clamp(this.momentum + (winner === 'player' ? 0.34 : -0.34), -1, 1)
+    if (winner === 'ai') this.perfectCombo = 0
+
     const st = useStore.getState()
     st.point(winner, this.score.p, this.score.a, this.server)
     st.setRally(0)
+    st.setMomentum(this.momentum)
+    st.setPerfectCombo(this.perfectCombo)
     this.rally = 0
+    this.resetPresses()
 
-    this.emitFX({ ...this.ball.pos }, winner === 'player' ? '#67e8f9' : '#ff5470', 26, 6, true)
+    this.emitFX({ ...this.ball.pos }, winner === 'player' ? '#67e8f9' : '#ff5470', 30, 7, true)
     this.pushRing({ ...this.ball.pos }, winner === 'player' ? '#67e8f9' : '#ff5470')
-    this.bumpShake(0.4)
+    this.bumpShake(0.45)
+    this.fovPunch = 1
 
-    // did this win the game?
     const { p, a } = this.score
     const won =
       (winner === 'player' && p >= GAME_TARGET && p - a >= 2) ||
@@ -837,6 +1019,7 @@ export class Engine {
 
     if (won) {
       this.pointTimer = WIN_DELAY
+      this.slowmoScale = 0.28
       this.slowmoT = 1.25
       this.lastMpShown = null
     }
@@ -852,18 +1035,15 @@ export class Engine {
 
     if (won) {
       st.showBanner(winner === 'player' ? 'GAME!' : 'GAME...', winner === 'player' ? 'epic' : 'bad', label)
-      if (this.mode !== 'demo') {
-        if (winner === 'player') sfx.matchWin()
-        else sfx.matchLose()
-      }
-      this.pendingGameOver = { winner, winnerSideWon: winner }
+      if (winner === 'player') sfx.matchWin()
+      else sfx.matchLose()
+      this.pendingGameOver = { winner }
     } else {
       st.showBanner(winText, winner === 'player' ? 'good' : 'bad', label || undefined)
-      if (this.mode !== 'demo') sfx.point(winner === 'player')
+      st.flashScreen(winner === 'player' ? 'cyan' : 'red')
+      sfx.point(winner === 'player')
     }
   }
-
-  private pendingGameOver: { winner: Side; winnerSideWon: Side } | null = null
 
   private afterPoint() {
     if (this.pendingGameOver) {
@@ -882,7 +1062,7 @@ export class Engine {
     const playerWon = winner === 'player'
 
     if (this.mode === 'quick') {
-      if (playerWon && this.mode === 'quick' && st.tierIndex >= 1) st.unlockOverdrive()
+      if (playerWon && st.tierIndex >= 1) st.unlockOverdrive()
       st.finishGame({
         won: playerWon,
         title: playerWon ? 'VICTORY' : 'DEFEAT',
@@ -894,24 +1074,12 @@ export class Engine {
       if (playerWon) {
         if (st.gauntletRound >= GAUNTLET.length - 1) {
           st.clearGauntlet()
-          st.finishGame({
-            won: true,
-            title: 'GAUNTLET CHAMPION',
-            sub: `All five machines defeated. MIDAS paddle unlocked.`,
-          })
+          st.finishGame({ won: true, title: 'GAUNTLET CHAMPION', sub: 'All five machines defeated. MIDAS paddle unlocked.' })
         } else {
-          st.finishGame({
-            won: true,
-            title: 'ROUND CLEAR',
-            sub: `Next up: ${GAUNTLET[st.gauntletRound + 1].name}`,
-          })
+          st.finishGame({ won: true, title: 'ROUND CLEAR', sub: `Next up: ${GAUNTLET[st.gauntletRound + 1].name}` })
         }
       } else {
-        st.finishGame({
-          won: false,
-          title: 'GAUNTLET OVER',
-          sub: `${this.aiName} ends your run at round ${st.gauntletRound + 1}`,
-        })
+        st.finishGame({ won: false, title: 'GAUNTLET OVER', sub: `${this.aiName} ends your run at round ${st.gauntletRound + 1}` })
       }
     } else if (this.mode === 'duel') {
       st.finishGame({
@@ -928,19 +1096,14 @@ export class Engine {
     this.ball.visible = false
     const st = useStore.getState()
     const s = this.trick.score
-    st.finishGame({
-      won: s > 0,
-      title: 'TIME!',
-      sub: `Trick shot score: ${s}${s >= st.trickBest && s > 0 ? ' — NEW BEST!' : ''}`,
-    })
+    st.finishGame({ won: s > 0, title: 'TIME!', sub: `Trick shot score: ${s}${s >= st.trickBest && s > 0 ? ' — NEW BEST!' : ''}` })
   }
 
   private endRallyTrick() {
-    // rally ended without timer expiring → reset combo, quick re-serve
     this.trick.combo = 1
     useStore.getState().setTrick(this.trick.score, this.trick.timeLeft, 1)
     this.phase = 'point'
-    this.pointTimer = 0.8
+    this.pointTimer = 0.7
     this.ball.active = false
     this.ball.visible = false
     this.server = 'player'
@@ -957,13 +1120,15 @@ export class Engine {
         const pts = 100 * this.trick.combo
         this.trick.score += pts
         this.trick.combo = Math.min(9, this.trick.combo + 1)
-        this.emitFX({ x: tg.x, y: TABLE.H + 0.1, z: tg.z }, '#ffd166', 24, 5, true)
+        this.emitFX({ x: tg.x, y: TABLE.H + 0.1, z: tg.z }, '#ffd166', 26, 5.5, true)
         this.pushRing({ x: tg.x, y: TABLE.H + 0.05, z: tg.z }, '#ffd166')
         sfx.target()
         this.bumpShake(0.3)
+        this.fovPunch = 0.7
         const st = useStore.getState()
         st.setTrick(this.trick.score, this.trick.timeLeft, this.trick.combo)
         st.showBanner(`+${pts}`, 'epic', this.trick.combo > 2 ? `COMBO x${this.trick.combo - 1}` : undefined)
+        st.flashScreen('gold')
         setTimeout(() => this.spawnTarget(), 400)
         return
       }
@@ -994,7 +1159,6 @@ export class Engine {
   }
 
   // ── helpers ───────────────────────────────────────────────────────────────
-  /** Solve a launch velocity from p0 to (tx, tz) at table-top height with given horizontal speed. */
   private solveShot(p0: Vec3, tx: number, tz: number, speed: number, curveV: number): Vec3 {
     let T = Math.max(0.3, Math.hypot(tx - p0.x, tz - p0.z) / speed)
     const g = GRAV + curveV
@@ -1005,13 +1169,12 @@ export class Engine {
       vy = (TABLE.H + BALL_R + 0.02 - p0.y - 0.5 * g * T * T) / T
       vx = (tx - p0.x) / T
       vz = (tz - p0.z) / T
-      // net clearance check
-      if (Math.sign(p0.z) === Math.sign(tz) || tz === 0) break // doesn't cross net plane
+      if (Math.sign(p0.z) === Math.sign(tz) || tz === 0) break
       const tn = -p0.z / vz
       if (tn <= 0 || tn >= T) break
       const yNet = p0.y + vy * tn + 0.5 * g * tn * tn
       if (yNet > NET_H + BALL_R + 0.1) break
-      T *= 1.18 // lob higher
+      T *= 1.18
     }
     return { x: vx, y: vy, z: vz }
   }

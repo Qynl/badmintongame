@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Scene } from './three/Scene'
-import { HUD, BannerView } from './ui/HUD'
+import { HUD, BannerView, FlashView } from './ui/HUD'
 import { MainMenu, DifficultyScreen, GauntletIntro, ResultScreen, PauseOverlay } from './ui/Menus'
 import { useStore } from './game/store'
 import { engine } from './game/engine'
@@ -136,6 +136,7 @@ export default function App() {
     <div className="app-root">
       <Scene />
       <div className="ui-layer">
+        <FlashView />
         <BannerView />
         {screen === 'game' && !paused && <HUD />}
         {screen === 'game' && paused && <PauseOverlay />}

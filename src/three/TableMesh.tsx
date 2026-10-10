@@ -1,7 +1,32 @@
+import { useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
 import { TABLE, HALF_L, HALF_W, NET_H } from '../game/constants'
+import { engine } from '../game/engine'
 
 export function TableMesh() {
-  const edge = '#22d3ee'
+  const edgeMats = useRef<THREE.MeshBasicMaterial[]>([])
+  const centerMat = useRef<THREE.MeshBasicMaterial>(null)
+
+  useFrame(({ clock }) => {
+    const pulse = 0.75 + engine.hitPulse * 0.9 + Math.sin(clock.elapsedTime * 2.4) * 0.08
+    for (const m of edgeMats.current) {
+      if (!m) continue
+      // pulse brightness via color intensity
+      const c = 0.72 + Math.min(0.5, engine.hitPulse) * 0.4
+      m.color.setRGB(0.13 * c * 2.2, 0.83 * c, 0.93 * c)
+    }
+    void pulse
+    if (centerMat.current) {
+      const c = 0.7 + engine.hitPulse * 0.5
+      centerMat.current.color.setRGB(0.91 * c, 0.47 * c, 0.98 * c)
+    }
+  })
+
+  const reg = (el: THREE.MeshBasicMaterial | null, i: number) => {
+    if (el) edgeMats.current[i] = el
+  }
+
   return (
     <group>
       {/* table top */}
@@ -17,20 +42,20 @@ export function TableMesh() {
       ] as const).map(([x, z, w, d], i) => (
         <mesh key={`e${i}`} position={[x, TABLE.H + 0.008, z]}>
           <boxGeometry args={[w, 0.016, d]} />
-          <meshBasicMaterial color={edge} />
+          <meshBasicMaterial ref={(el) => reg(el, i)} color="#22d3ee" toneMapped={false} />
         </mesh>
       ))}
       {([HALF_W, -HALF_W] as const).map((x, i) => (
         <mesh key={`s${i}`} position={[x, TABLE.H + 0.008, 0]}>
           <boxGeometry args={[0.06, 0.016, TABLE.L + 0.08]} />
-          <meshBasicMaterial color={edge} />
+          <meshBasicMaterial ref={(el) => reg(el, i + 2)} color="#22d3ee" toneMapped={false} />
         </mesh>
       ))}
 
       {/* center line */}
       <mesh position={[0, TABLE.H + 0.007, 0]}>
         <boxGeometry args={[0.035, 0.012, TABLE.L]} />
-        <meshBasicMaterial color="#e879f9" transparent opacity={0.8} />
+        <meshBasicMaterial ref={centerMat} color="#e879f9" transparent opacity={0.8} toneMapped={false} />
       </mesh>
 
       {/* table skirt glow */}

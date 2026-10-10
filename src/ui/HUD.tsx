@@ -1,6 +1,25 @@
 import { useEffect } from 'react'
 import { useStore } from '../game/store'
 
+const FLASH_COLORS: Record<string, string> = {
+  gold: 'rgba(251, 191, 36, 0.32)',
+  cyan: 'rgba(34, 211, 238, 0.25)',
+  red: 'rgba(244, 63, 94, 0.28)',
+  white: 'rgba(255, 255, 255, 0.3)',
+}
+
+export function FlashView() {
+  const flash = useStore((s) => s.flash)
+  if (!flash) return null
+  return (
+    <div
+      key={flash.id}
+      className="flash-overlay"
+      style={{ background: `radial-gradient(ellipse at center, transparent 30%, ${FLASH_COLORS[flash.color] ?? 'rgba(255,255,255,0.25)'})` }}
+    />
+  )
+}
+
 export function BannerView() {
   const banner = useStore((s) => s.banner)
   const clearBanner = useStore((s) => s.clearBanner)
@@ -31,6 +50,8 @@ export function HUD() {
   const flowActive = useStore((s) => s.flowActive)
   const charge = useStore((s) => s.charge)
   const matchPoint = useStore((s) => s.matchPoint)
+  const momentum = useStore((s) => s.momentum)
+  const perfectCombo = useStore((s) => s.perfectCombo)
   const trickScore = useStore((s) => s.trickScore)
   const trickTime = useStore((s) => s.trickTime)
   const trickCombo = useStore((s) => s.trickCombo)
@@ -46,18 +67,26 @@ export function HUD() {
           {trickCombo > 1 && <div className="trick-combo">COMBO ×{trickCombo}</div>}
         </div>
       ) : (
-        <div className="scoreboard">
-          <div className={`score-side ${server === 'player' ? 'serving' : ''}`}>
-            <span className="score-name">{pName}</span>
-            <span className="score-num cyan">{pScore}</span>
+        <>
+          <div className="scoreboard">
+            <div className={`score-side ${server === 'player' ? 'serving' : ''}`}>
+              <span className="score-name">{pName}</span>
+              <span className="score-num cyan">{pScore}</span>
+            </div>
+            <div className="score-dash">—</div>
+            <div className={`score-side right ${server === 'ai' ? 'serving' : ''}`}>
+              <span className="score-num magenta">{aScore}</span>
+              <span className="score-name">{opponentName}</span>
+            </div>
           </div>
-          <div className="score-dash">—</div>
-          <div className={`score-side right ${server === 'ai' ? 'serving' : ''}`}>
-            <span className="score-num magenta">{aScore}</span>
-            <span className="score-name">{opponentName}</span>
+          <div className="momentum-bar">
+            <div className="momentum-fill" style={{ left: '50%', width: `${Math.max(0, momentum) * 50}%` }} />
+            <div className="momentum-fill neg" style={{ right: '50%', width: `${Math.max(0, -momentum) * 50}%` }} />
           </div>
-        </div>
+        </>
       )}
+
+      {perfectCombo >= 2 && <div className="perfect-chip">PERFECT ×{perfectCombo}</div>}
 
       {matchPoint && (
         <div className={`mp-chip ${matchPoint === 'player' ? 'good' : 'bad'}`}>
@@ -81,11 +110,15 @@ export function HUD() {
         <div className="charge-bar">
           <div className={`charge-fill ${charge >= 1 ? 'full' : ''}`} style={{ width: `${charge * 100}%` }} />
         </div>
-        <div className="charge-label">SMASH</div>
+        <div className="charge-label">HOLD TO CHARGE · RELEASE ON IMPACT</div>
       </div>
 
       <div className="controls-hint">
-        {mode === 'duel' ? 'P1: A/D + W · P2: ◀/▶ + ▲' : mode === 'trick' ? 'hit the gold targets on the far side' : 'move: mouse / ◀ ▶ · hold click or SPACE to charge smash'}
+        {mode === 'duel'
+          ? 'P1: A/D + W · P2: ◀/▶ + ▲'
+          : mode === 'trick'
+            ? 'bounce the ball into the gold rings'
+            : 'move: mouse · click exactly when the ring closes for a PERFECT'}
       </div>
     </div>
   )

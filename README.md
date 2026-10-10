@@ -1,8 +1,6 @@
 # 🏓 NEON SMASH — Arena Table Tennis
 
-A fast, juicy arcade table-tennis game in a synthwave arena. Charge smashes, bend shots with spin, enter **Flow State**, and duel machines that fight back. Built with **Vite + React + TypeScript + Three.js (react-three-fiber)**.
-
-![stack](https://img.shields.io/badge/Vite-7-646cff) ![stack](https://img.shields.io/badge/React-18-149eca) ![stack](https://img.shields.io/badge/Three.js-r170-black)
+A fast, juicy arcade table-tennis game in a synthwave arena. Time your swings for **PERFECT** strikes, charge smashes, bend shots with spin, enter **Flow State**, and duel machines that fight back. Built with **Vite + React + TypeScript + Three.js (react-three-fiber + drei)**.
 
 ## Run it
 
@@ -12,13 +10,30 @@ npm run dev      # → http://localhost:5173
 npm run build    # type-check + production build
 ```
 
+## Combat model
+
+Every incoming ball gets a **timing ring** that shrinks onto a gold sweet-spot ring at your paddle plane:
+
+| Input at contact | Result |
+|---|---|
+| Release **exactly** as the rings meet (≤100 ms) | **PERFECT** — extra speed, extended reach (lunge), slow-mo flash, builds a PERFECT combo |
+| Release within ~260 ms | **GOOD** — full-power shot with your charge |
+| Release way early | **WEAK** — slow, sprays randomly |
+| Keep holding through contact | **BLOCK** — medium power, safe placement |
+| Never press | **SOFT** — safe little reset shot… but the AI *punishes* soft feeds with corner attacks |
+
+- **Hold** click/Space to charge power (watch the bar + hear the riser), **release on impact**.
+- Shot **direction** comes from where on the paddle you meet the ball: edge contact = sharp cross-court angles. The **aim reticle** on the opponent's table previews where your current approach will send the ball, live.
+- **Swipe while striking** to add sidespin — weaker machines misread curve.
+- AI **smash telegraph**: the machine's paddle strobes white before it swings. Survive it, then counter — it's sluggish in recovery.
+
 ## Game modes
 
 | Mode | What it is |
 |---|---|
 | **Quick Match** | First to 11 (win by 2) vs. an AI of your choice. |
 | **Gauntlet** | Five machines in a row, no continues. Clear all five to unlock the **MIDAS** paddle. |
-| **Trick Shot** | 60 seconds of target practice — bounce the ball into gold rings on the far side, chain combos. |
+| **Trick Shot** | 60 seconds — bounce the ball into gold rings on the far side, chain combos. |
 | **Local Duel** | Two humans, one keyboard, one table. |
 
 The main menu runs a live AI-vs-AI demo rally behind the UI.
@@ -28,20 +43,18 @@ The main menu runs a live AI-vs-AI demo rally behind the UI.
 | Action | Input |
 |---|---|
 | Move paddle | Mouse (or `◀ ▶` / `A D`) |
-| Charge smash | Hold **click** or **Space**, release timing matters |
+| Charge / swing | Hold **click** or **Space**, release on impact |
 | Serve | Click / Space on your serve |
-| Sidespin | Move the paddle *while* striking — swipe to curve the ball |
 | Pause | `Esc` / `P` |
 | Mute | `M` |
 
-**Local Duel:** P1 = `A`/`D` + `W` (charge/serve) · P2 = `◀`/`▶` + `▲` (charge/serve)
+**Local Duel:** P1 = `A`/`D` + `W` · P2 = `◀`/`▶` + `▲`
 
 ## Mechanics worth knowing
 
-- **Angle shots** — contact with the *edge* of the paddle sends the ball cross-court. Corner placement is how you move a machine out of position.
-- **Spin** — paddle velocity at contact curves the flight. Weaker machines misread spin badly (`curveRead` stat).
-- **Flow State** — every successful return fills the FLOW meter. When full, your next hit slows the opponent's world for 3.5 s.
-- **Smash recovery** — machines that smash are sluggish for a moment afterwards. Survive the smash, counter to the open corner.
+- **Flow State** — returns fill the FLOW meter (PERFECTs fill it fastest). When full, your next hit slows the machine's world for 3.5 s.
+- **Momentum bar** — under the scoreboard shows who's dominating the match.
+- **PERFECT combos** — chain perfect strikes for rising-pitch chimes and bigger slow-mo bragging rights.
 - **Match-point slow-mo** — game-winning points finish in cinematic slow motion.
 
 ## Opponents
@@ -58,28 +71,29 @@ The main menu runs a live AI-vs-AI demo rally behind the UI.
 ```
 src/
   game/
-    engine.ts     # fixed-step (120 Hz) simulation: ballistics, spin, AI, scoring
+    engine.ts     # fixed-step (120 Hz) simulation: ballistics, spin, timing combat, AI, scoring
     constants.ts  # geometry + physics tuning + tier/skin definitions
     store.ts      # zustand UI/game-flow store (+ localStorage save)
-    audio.ts      # procedural Web-Audio SFX + adaptive synthwave loop
+    audio.ts      # procedural Web-Audio SFX, charge riser, adaptive synthwave loop
   three/
     Scene.tsx     # Canvas assembly + sim loop
-    CameraRig.tsx # mode-aware camera (behind / broadcast / orbit / cinematic)
-    Arena.tsx     # synthwave set: grid, pillars, sun, dust
-    TableMesh.tsx # neon table + net
-    Paddles.tsx   # paddles, swing animation, serve aim ghost
-    BallFX.tsx    # ball + heat color + instanced light trail
+    CameraRig.tsx # mode-aware camera + FOV punch + slow-mo cinematics
+    Arena.tsx     # reflective floor, crowd of light orbs, pillars, sun, dust
+    TableMesh.tsx # neon table + net with hit-pulse glow
+    Paddles.tsx   # paddles, charge VFX, swing animation, AI smash telegraph
+    Reticle.tsx   # live aim reticle + shrinking timing ring
+    BallFX.tsx    # ball stretch/squash, heat color, light trail, blob shadow
     ImpactFX.tsx  # pooled spark particles + shockwave rings
     Targets.tsx   # trick-shot rings
     Effects.tsx   # bloom / chromatic aberration / vignette / grain
-  ui/             # HUD, menus, banners (DOM overlay)
+  ui/             # HUD (momentum, flow, combos), menus, banners, screen flashes
   App.tsx         # screens + global input
-scripts/          # headless engine smoke tests (run via esbuild + node)
+scripts/          # headless engine smoke tests (esbuild → node)
 ```
 
-- **Deterministic physics** — gravity, drag, Magnus-style spin curves, table restitution, net collisions; decoupled from render rate.
-- **AI model** — reaction delay + prediction error + spin-read quality + movement speed per tier; smashes cost recovery time.
-- **Juice** — hit-stop, screen shake, particle bursts, shockwave rings, slow-mo finishers, adaptive music layers driven by rally length.
+- **Deterministic physics** — gravity, drag, spin curves, table restitution, net collisions; decoupled from render rate.
+- **AI model** — reaction delay + prediction error + spin-read quality + movement speed per tier; smashes cost recovery time and sometimes overhit.
+- **Juice** — hit-stop, screen shake, FOV punch, particle bursts, shockwave rings, screen flashes, perfect slow-mo, ball squash & stretch, crowd that bounces to the beat, adaptive music layers.
 - **Persistence** — skins, OVERDRIVE unlock, gauntlet completion and trick-shot best saved to `localStorage`.
 
 ## Headless tests
@@ -88,4 +102,4 @@ scripts/          # headless engine smoke tests (run via esbuild + node)
 npx esbuild scripts/smoke.ts --bundle --platform=node --format=cjs | node
 ```
 
-`scripts/smoke*.ts` simulate full matches (serve → rally → scoring → match end) for every mode without a browser.
+`scripts/smoke*.ts` simulate full matches (serve → timing hits → scoring → match end) for every mode without a browser.
